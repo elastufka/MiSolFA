@@ -40,7 +40,7 @@ def read_data(elementf):
 def Wien_approx(energy):
     '''Use Wien approximation to calculate solar spectrum. See notes in wiki.'''
     kev_to_joules = 10E-3*sc.e
-    T_sun = 5280.
+    T_sun = 5700.
     energy_joules= energy*kev_to_joules
     Nphotons = (2*(energy_joules/(sc.h*sc.c))**2)*np.exp(-1.*energy_joules/(sc.k*T_sun))
     
@@ -54,7 +54,7 @@ def Wien_approx(energy):
 def Planck(energy):
     '''Use Wien approximation to calculate solar spectrum. See notes in wiki.'''
     kev_to_joules = 10E-3*sc.e
-    T_sun = 5280.
+    T_sun = 5700.
     energy_joules= energy*kev_to_joules
     Nphotons = (2*(energy_joules/(sc.h*sc.c))**2)*(1/(np.exp(energy_joules/(sc.k*T_sun)) -1))
     
@@ -97,7 +97,7 @@ def plot_data(element,data_dict,thickness='thickness'):
     ax1.legend(loc='lower right',fontsize='medium')
 
     ax2 = plt.subplot(211)
-    plt.xlabel('Energy (keV)')
+    #plt.xlabel('Energy (keV)')
     plt.ylabel('Counts')
     ax2.set_ylim([1,10e20])
     ax2.set_xlim([1,100])
