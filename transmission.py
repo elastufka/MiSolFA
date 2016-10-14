@@ -8,6 +8,7 @@
 #######################################
 # Usage:
 
+# for default output: python transmission.py
 ######################################
 
 import glob
@@ -15,18 +16,15 @@ import os
 import numpy as np
 from numpy import genfromtxt
 import matplotlib.pyplot as plt
-#from matplotlib.backends.backend_pdf import PdfPages
-#import matplotlib.gridspec as gridspec
 import Image
 import csv
+import scipy.constants as sc
 
 def read_data(elementf): 
     '''Reads data in from csv files and puts it in a Python dictionary'''
-    dir='/home/erica/Documents/Solar/MiSolFA/calculations/data'
-    os.chdir(dir)
+    #dir='/home/erica/Documents/Solar/MiSolFA/calculations/data'
+    #os.chdir(dir)
     filename=elementf
-    #filename=element+'.csv'
-    #filename='Wtest.csv'
 
     with open(filename, 'rb') as f:
         reader = csv.reader(f)
@@ -39,18 +37,71 @@ def read_data(elementf):
     data_dict = {header[0]:data[1:datadim[0],0], header[1]:data[1:datadim[0],1],header[2]:data[1:datadim[0],2],header[3]:data[1:datadim[0],3],header[4]:data[1:datadim[0],4],header[5]:data[1:datadim[0],5],header[6]:data[1:datadim[0],6]}
     return data_dict
 
-#def calc_transmission(data_dict): #calculate with whatever thickness
+def Wien_approx(energy):
+    '''Use Wien approximation to calculate solar spectrum. See notes in wiki.'''
+    kev_to_joules = 10E-3*sc.e
+    T_sun = 5280.
+    energy_joules= energy*kev_to_joules
+    Nphotons = (2*(energy_joules/(sc.h*sc.c))**2)*np.exp(-1.*energy_joules/(sc.k*T_sun))
+    
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.loglog(energy, Nphotons, marker="s")
+    #fig.show()
 
+    return Nphotons
 
-#def calc_counts(data_dict): #calculate number of counts
-#    distribution = #distribution of photons at whatever energy. Use energy column to calculate
-#    counts = distribution*data_dict['P(xi) (d=100 um)']
-#    return counts
+def Planck(energy):
+    '''Use Wien approximation to calculate solar spectrum. See notes in wiki.'''
+    kev_to_joules = 10E-3*sc.e
+    T_sun = 5280.
+    energy_joules= energy*kev_to_joules
+    Nphotons = (2*(energy_joules/(sc.h*sc.c))**2)*(1/(np.exp(energy_joules/(sc.k*T_sun)) -1))
+    
+    #fig = plt.figure()
+    #ax1 = fig.add_subplot(111)
+    #ax1.loglog(energy, Nphotons, marker="o")
+    #fig.show()
 
-def plot_data(element,data_dict,thickness='thickness'): #plot E vs P for various thicknesses
+    return Nphotons
+
+def Planckfig(Nphotons,energy):
+    '''Make a figure of the Planck function '''
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.loglog(energy, Nphotons*energy, marker="o")
+    plt.xlabel('Energy (keV)')
+    plt.ylabel('Intensity (W/m^2 per photon energy)')
+    #ax1.set_ylim([0,10e30])
+    ax1.set_xlim([1,100])
+    plt.title("Planck distribution")
+    fig.show()
+
+    return fig
+
+def calc_counts(data_dict,key): 
+    '''calculate number of counts for given thickness'''
+    Nphotons = Planck(data_dict['E (keV)'])
+    counts = Nphotons*data_dict[key]
+    return counts
+
+def plot_data(element,data_dict,thickness='thickness'):
+    '''Plot E vs T and E vs counts for given element and thickness'''
+    colors=['b','g','r','c','m']
     fig = plt.figure()
     ax1 = fig.add_subplot(212)
-    colors=['b','g','r','c','m']
+    plt.xlabel('Energy (keV)')
+    plt.ylabel('Transmission')
+    ax1.set_ylim([10e-50,10e0])
+    ax1.set_xlim([1,100])
+    ax1.legend(loc='lower right',fontsize='medium')
+
+    ax2 = plt.subplot(211)
+    plt.xlabel('Energy (keV)')
+    plt.ylabel('Counts')
+    ax2.set_ylim([1,10e20])
+    ax2.set_xlim([1,100])
+
 
     if thickness != 'thickness': #to compare different elements - now it is a list of dictionaries,not just a dictionary. So get the keys
         keys=data_dict[0].keys()
@@ -60,7 +111,9 @@ def plot_data(element,data_dict,thickness='thickness'): #plot E vs P for various
                 if thickness in key:
                     x1=data_dict[item]['E (keV)'] 
                     ax1.loglog(x1, data_dict[item][key], marker="s", c=colors[item],label=data_dict[item]['element'])
+                    ax2.loglog(x1,calc_counts(data_dict[item], key), marker="s", c=colors[item])
                     #fig.show()
+      
       
     else: 
         keys=data_dict.keys()
@@ -71,25 +124,9 @@ def plot_data(element,data_dict,thickness='thickness'): #plot E vs P for various
             if key.startswith('P'):
                 print key
                 ax1.loglog(x1, data_dict[key], marker="s", c=colors[n],label=key)
+                ax2.loglog(x1,calc_counts(data_dict, key),marker="s", c=colors[n])
                 n=n+1     
 
-    plt.xlabel('Energy (keV)')
-    plt.ylabel('Transmission')
-    ax1 = plt.subplot(212)
-    ax1.set_ylim([10e-100,10e0])
-    ax1.set_xlim([1,100])
-    ax1.legend(loc='lower right',fontsize='medium');
-  
-    plt.subplot(2, 1, 1)
-    #plt.loglog(x1, y2, 'r.-')
-    plt.ylabel('Counts')
-    #ax2 = plt.subplot(212)
-    #ax2.set_ylim([10e-100,10e-0])
-    #ax2.set_xlim([1,100])
-    #plt.legend(loc='lower right');
-
-    #fig=plt.figure()
-    #fig.savefig(element+'.pdf')
     return fig
 
 #convert figure to data
@@ -124,36 +161,32 @@ def fig2image(fig):
     return Image.frombytes( "RGBA", ( w ,h ), buf.tostring( ) )
 
 def compare_thickness(elements=0):
-     if elements is 0:
-         elements=['W','Au','Au80Sn20','Si','Be','Al']
-     #assume 6 elements
-     newfig, axes = plt.subplots(3, 2, figsize=(10, 12),
-                         subplot_kw={'xticks': [], 'yticks': []})
-     plt.subplots_adjust(wspace=0,hspace=0)
+    '''Make plots for various thicknesses and output to pdf'''
 
-     for element, ax in zip(elements,axes.flat):
+    if elements is 0:
+         elements=['W','Au','Au80Sn20','Si','Be','Al']
+
+     #assume 6 elements
+    newfig, axes = plt.subplots(3, 2, figsize=(10, 12),
+                         subplot_kw={'xticks': [], 'yticks': []})
+    plt.subplots_adjust(wspace=0,hspace=0)
+
+    for element, ax in zip(elements,axes.flat):
          data_dict=read_data(element+'.csv')
          fig=plot_data(element,data_dict)
          image= fig2image(fig)
-         #nsubplot = 320 + np
-         #print nsubplot
-         #newfig.add_subplot(nsubplot)
          ax.imshow(image,interpolation='none')
-         #plt.tight_layout()
-         #np=np+1
 
      #newfig.show()
-     #plt.subplots_adjust(wspace=0,hspace=0)
-     newfig.savefig('compare_thickness.pdf',dpi=300)
-# enter element and desired thickness
-# if thickness is not in data set, calculate (later)
-# generate plots
+    newfig.savefig('compare_thickness.pdf',dpi=300)
 
 def compare_elements(elements=0, thickness=0): #thickness is also an array
+    '''Make plots for various elements and output to pdf'''
     if elements is 0:
         elements=['W','Au','Au80Sn20']
     if thickness is 0:
         thickness=['100','150','200','250','300']
+
     #make a new data_dict
     list_dict = []
 
@@ -170,6 +203,10 @@ def compare_elements(elements=0, thickness=0): #thickness is also an array
         fig = plot_data('foo',list_dict,thickness=thick)
         image= fig2image(fig)
         ax.imshow(image,interpolation='none')
+
+    planckfig=Planckfig(Planck(list_dict[0]['E (keV)']),list_dict[0]['E (keV)'])#let's plot the Planck disttribution in the final spot   
+    planckimage=fig2image(planckfig)
+    axes.flat[5].imshow(planckimage,interpolation='none')
 
     newfig.savefig('compare_elements.pdf',dpi=300)
 
