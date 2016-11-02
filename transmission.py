@@ -16,7 +16,7 @@ import os
 import numpy as np
 from numpy import genfromtxt
 import matplotlib.pyplot as plt
-import Image
+#import Image
 import csv
 import scipy.constants as sc
 
@@ -52,18 +52,24 @@ def Wien_approx(energy):
     return Nphotons
 
 def Planck(energy):
-    '''Use Wien approximation to calculate solar spectrum. See notes in wiki.'''
+    '''Use Planck function to calculate solar spectrum. See notes in wiki.'''
     kev_to_joules = 10E-3*sc.e
-    T_sun = 5700.
+    #T_sun = 5700.
+    T_sun=20.*10E6 #for a flare
     energy_joules= energy*kev_to_joules
     Nphotons = (2*(energy_joules/(sc.h*sc.c))**2)*(1/(np.exp(energy_joules/(sc.k*T_sun)) -1))
-    
-    #fig = plt.figure()
-    #ax1 = fig.add_subplot(111)
-    #ax1.loglog(energy, Nphotons, marker="o")
-    #fig.show()
 
     return Nphotons
+
+def MaxwellBoltzmann(energy):
+    '''Use Maxwell Boltzmann distribution to calculate solar spectrum. See notes in wiki.'''
+    kev_to_joules = 10E-3*sc.e
+    #T_sun = 5700.
+    T_sun=20.*10E6 #for a flare
+    energy_joules= energy*kev_to_joules
+    prob = (2*(energy_joules/sc.pi)**(.5))*(1/(sc.k*T_sun))**(3/2)*(np.exp(-1*energy_joules/(sc.k*T_sun)))
+    #Nphotons = (1/(sc.k*T_sun))*(np.exp(-1*energy_joules/(sc.k*T_sun)))
+    return prob
 
 def Planckfig(Nphotons,energy):
     '''Make a figure of the Planck function '''
@@ -72,12 +78,33 @@ def Planckfig(Nphotons,energy):
     ax1.loglog(energy, Nphotons*energy, marker="o")
     plt.xlabel('Energy (keV)')
     plt.ylabel('Intensity (W/m^2 per photon energy)')
-    #ax1.set_ylim([0,10e30])
+    ax1.set_ylim([0,10e15])
     ax1.set_xlim([1,100])
-    plt.title("Planck distribution")
+    plt.title("Planck distribution ")
     fig.show()
 
     return fig
+
+def DistributionFig(P_Np,MB_prob,energy):
+    '''Make a figure of the Planck function compared to the Maxwell Boltzmann distrubution'''
+    #need to normalize both distributions
+    P_dist = (P_Np)/np.trapz(P_Np)
+    MB_dist = MB_prob/np.trapz(MB_prob)
+    print np.trapz(P_dist), np.trapz(MB_dist)
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.semilogx(energy, P_dist, color="b", label="Planck")
+    ax1.semilogx(energy, MB_dist, color="r",label="Maxwell-Boltzmann")
+    plt.xlabel('Energy (keV)')
+    plt.ylabel('Normalized Distribution')
+    ax1.set_ylim([0, 0.015])
+    #ax1.set_xlim([1,100000000])
+    plt.title("Planck distribution vs. Maxwell Boltzmann distribution, T=20 million K")
+    ax1.legend(loc='upper left',fontsize='medium')
+
+    fig.show()
+
+    #return fig
 
 def calc_counts(data_dict,key): 
     '''calculate number of counts for given thickness'''
@@ -214,5 +241,9 @@ def compare_elements(elements=0, thickness=0): #thickness is also an array
 
 #compare_thickness(['W','Au','Au80Sn20','Si','Be','Al'])
 #compare_elements(['W','Au','Au80Sn20'], ['100','150','200','250','300'])
-compare_elements()
-compare_thickness()
+#compare_elements()
+#compare_thickness()
+#data_dict=read_data('Au.csv')
+en=np.linspace(1,100000,200)
+
+DistributionFig(Planck(en), MaxwellBoltzmann(en), en)
