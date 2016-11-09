@@ -28,7 +28,7 @@ def flare_XR_dist():
     idl.close()
     dist= ntnt[1:]+thth
     
-    return eedd[1:],dist,ntnt,thth
+    return eedd[1:],dist,ntnt[1:],thth
 
 def plot_flare_XR_dist():
     dist=flare_XR_dist()
@@ -39,7 +39,7 @@ def plot_flare_XR_dist():
 
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
-    ax1.loglog(eedd, thth[1:], color="r",label="Thermal emission")
+    ax1.loglog(eedd, thth, color="r",label="Thermal emission")
     ax1.loglog(eedd, ntnt, color="b",label="Non-thermal emission")
     ax1.loglog(eedd, total, color="g",label="Total emission")
     plt.xlabel('Energy (keV)')

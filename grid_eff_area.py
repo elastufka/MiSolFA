@@ -36,7 +36,10 @@ def input_distribution(energy,distribution):
         import flare_XR_dist as fd
         dist = fd.flare_XR_dist() #[energy, thermal part, non-thermal part]
         prob = np.interp(energy,dist[0],dist[1])
-        return prob
+        #print np.shape(dist[0]),np.shape(dist[2]),np.shape(dist[3])
+        ntnt = np.interp(energy,dist[0],dist[2])
+        thth = np.interp(energy,dist[0],dist[3])
+        return prob, ntnt, thth
 
 def slits(thickness, material='vaccuum'):
     '''Define geometry, thickness, material of slits, return them as a Python dictionary'''
@@ -80,13 +83,21 @@ def grid_eff_area(slit_input, substrate_input, distribution='uniform',instrument
     sub=substrate_properties['substrate_area']*substrate_transmission_interp
     slit=slit_properties['percent_area']*slit_transmission_interp
     
-    if distribution != 'uniform':
+    if distribution != 'uniform' and distribution != 'flare':
          factor =  input_distribution(evector,distribution)
          eff_area = (substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp) * factor
          sub=substrate_properties['substrate_area']*substrate_transmission_interp*factor
-         slit=slit_properties['percent_area']*slit_transmission_interp*factor 
+         slit=slit_properties['percent_area']*slit_transmission_interp*factor
 
     plotdata = evector,eff_area,sub,slit,substrate_properties,slit_properties
+
+    if distribution == 'flare':
+         factor,ntnt,thth =  input_distribution(evector,distribution)
+         eff_area = (substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp) * factor
+         sub=substrate_properties['substrate_area']*substrate_transmission_interp*factor
+         slit=slit_properties['percent_area']*slit_transmission_interp*factor
+         plotdata = evector,eff_area,sub,slit,substrate_properties,slit_properties,ntnt,thth
+         print 'here'
          
     return plotdata
 
@@ -108,7 +119,7 @@ def plot_eff_area(plotdata):
     
     plt.xlabel('Energy (keV)')
     plt.ylabel('Effective area (cm^2)')
-    #ax1.set_ylim([1,10e20])
+    ax1.set_ylim([0,1])
     ax1.set_xlim([0,150])
     plt.title("Effective area of grids "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + 'um, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'um' )
     ax1.legend(loc='lower right',fontsize='medium')
@@ -119,23 +130,26 @@ def plot_eff_area(plotdata):
 
 def plot_flare_counts(plotdata):
     '''Make the plot for if you have a small flare'''
+    print np.shape(plotdata)
     energy = plotdata[0]
     eff_area = plotdata[1]
     sub = plotdata[2]
     slit = plotdata[3]
     substrate_properties = plotdata[4]
     slit_properties = plotdata[5]
+    ntnt = plotdata[6]
+    thth = plotdata[7]
     
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     #ax1.ylog(energy, eff_area, color="b", label="Planck")
     ax1.loglog(energy, eff_area, color="r",label="total",linewidth='2')
-    ax1.loglog(energy, sub, color="g",label="substrate")
-    ax1.loglog(energy, slit, color="b",label="slits")
+    ax1.loglog(energy, thth, color="g",label="thermal")
+    ax1.loglog(energy, ntnt, color="b",label="non-thermal")
     print np.mean(eff_area),np.min(eff_area),np.max(eff_area)
     
     plt.xlabel('Energy (keV)')
-    plt.ylabel('Number of counts from medium sized flare')
+    plt.ylabel('Counts s-^1 keV^-1')
     ax1.set_ylim([10e-4,10e4])
     ax1.set_xlim([1,1000])
     plt.title("Flare counts, "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + 'um, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'um' )

@@ -100,7 +100,7 @@ def run_widget(sub_elements, slit_elements, sub_thickness,slit_thickness):
     data = ga.grid_eff_area(slit_input, substrate_input)
     ga.plot_eff_area(data)
     flare =  ga.grid_eff_area(slit_input,substrate_input, distribution='flare')
-    ga.plot_flare_counts(data)
+    ga.plot_flare_counts(flare)
 
 
 if __name__ == "__main__":
