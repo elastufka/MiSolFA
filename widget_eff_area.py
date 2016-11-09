@@ -104,5 +104,6 @@ def run_widget(sub_elements, slit_elements, sub_thickness,slit_thickness):
 
 
 if __name__ == "__main__":
-    run_widget(['Si','C','Polymer'],['Au','Au80Sn20','W'],['200','300','400','500','1000'],['100','150','200','250','300'])    
+    run_widget(['Si','C','Polymer'],['Au','Au80Sn20','W'],['200','300','400','500','1000'],['100','150','200','250','300'])
+    raw_input('Press Enter to quit')
 
