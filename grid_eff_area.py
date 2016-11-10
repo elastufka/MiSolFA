@@ -63,7 +63,7 @@ def grid_eff_area(slit_input, substrate_input, distribution='uniform',instrument
     slit_material = slit_input[0]
     substrate_thickness = substrate_input[1]
     substrate_material = substrate_input[0]
-    print slit_thickness, slit_material,substrate_thickness,substrate_material
+    #print slit_thickness, slit_material,substrate_thickness,substrate_material
     
     slit_properties = slits(slit_thickness, slit_material)
     substrate_properties = substrate(substrate_thickness, substrate_material)
@@ -74,7 +74,7 @@ def grid_eff_area(slit_input, substrate_input, distribution='uniform',instrument
     emin = np.min([np.min(slit_properties['energy']),np.min(substrate_properties['energy'])])
     emax = np.max([np.max(slit_properties['energy']),np.max(substrate_properties['energy'])])
     print emin,emax
-    evector = np.linspace(emin, 1000, num=400, endpoint=True)
+    evector = np.linspace(emin, 1000, num=500, endpoint=True)
     #print np.min(evector),np.max(evector)
     slit_transmission_interp = np.interp(evector,slit_properties['energy'],slit_properties['transmission'])
     substrate_transmission_interp = np.interp(evector,substrate_properties['energy'],substrate_properties['transmission'])
@@ -121,7 +121,7 @@ def plot_eff_area(plotdata):
     plt.ylabel('Effective area (cm^2)')
     ax1.set_ylim([0,1])
     ax1.set_xlim([0,150])
-    plt.title("Effective area of grids "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + 'um, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'um' )
+    plt.title("Effective area of grids "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + '$\mu$m, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'$\mu$m' )
     ax1.legend(loc='lower right',fontsize='medium')
 
     ax1.plot()
@@ -139,20 +139,23 @@ def plot_flare_counts(plotdata):
     slit_properties = plotdata[5]
     ntnt = plotdata[6]
     thth = plotdata[7]
+
+    slit_transmission_interp = np.interp(energy,slit_properties['energy'],slit_properties['transmission'])
+    substrate_transmission_interp = np.interp(energy,substrate_properties['energy'],substrate_properties['transmission'])
     
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     #ax1.ylog(energy, eff_area, color="b", label="Planck")
     ax1.loglog(energy, eff_area, color="r",label="total",linewidth='2')
-    ax1.loglog(energy, thth, color="g",label="thermal")
-    ax1.loglog(energy, ntnt, color="b",label="non-thermal")
+    ax1.loglog(energy, (substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp)*thth, color="g",label="thermal")
+    ax1.loglog(energy, (substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp)*ntnt, color="b",label="non-thermal")
     print np.mean(eff_area),np.min(eff_area),np.max(eff_area)
     
     plt.xlabel('Energy (keV)')
-    plt.ylabel('Counts s-^1 keV^-1')
+    plt.ylabel('Counts $s^{-1} keV^{-1}$')
     ax1.set_ylim([10e-4,10e4])
     ax1.set_xlim([1,1000])
-    plt.title("Flare counts, "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + 'um, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'um' )
+    plt.title("Flare counts, "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + '$\mu$m, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'$\mu$m' )
 
     #plt.title("Effective area of grids")
     ax1.legend(loc='upper right',fontsize='medium')
