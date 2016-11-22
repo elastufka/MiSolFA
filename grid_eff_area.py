@@ -84,12 +84,13 @@ def grid_eff_area(slit_input, substrate_input, distribution='uniform',attenuator
 
     detector_dict = read_data('/Users/wheatley/Documents/Solar/MiSolFA/calculations/data/CdTe.csv')
     detector = 1-np.interp(evector,detector_dict['E (keV)'],detector_dict['P(xi) (d=1000 um)']) #1mm CdTe - detector response is # of photons STOPPED by the detector, ie, 1-T_dectector
+    #detector = .5*detector #since there is a front and rear grid, we have to take into account those effects x2, or just halve the response of the detector ... that's not entirely right though ... because whatever doesn't get through the first grid is the input for the second. Need to think about this .... do you need to square it?
     if attenuator:
         data_dict = read_data('/Users/wheatley/Documents/Solar/MiSolFA/calculations/data/'+attenuator[0]+'.csv')
         ff = data_dict['P(xi) (d='+attenuator[1] +' um)']
-        fac = np.interp(evector,data_dict['E (keV)'],ff) * detector
+        fac = np.interp(evector,data_dict['E (keV)'],ff) * detector *.5
     else:
-        fac = 1.*detector
+        fac = 1.*detector *.5 #since there is a front and rear grid, we have to take into account those effects x2
 
     eff_area = (substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp)*fac #area of substrate * transmission % + area of slits * transmission %? can this be greater than 1?
     sub=substrate_properties['substrate_area']*substrate_transmission_interp*fac
@@ -97,7 +98,7 @@ def grid_eff_area(slit_input, substrate_input, distribution='uniform',attenuator
     
     if distribution != 'uniform' and distribution != 'flare':
          factor =  input_distribution(evector,distribution)
-         eff_area = (substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp) * factor*fac
+         eff_area =(substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp) * factor*fac
          sub=substrate_properties['substrate_area']*substrate_transmission_interp*factor*fac
          slit=slit_properties['percent_area']*slit_transmission_interp*factor*fac
 
@@ -134,7 +135,7 @@ def plot_eff_area(plotdata):
     
     plt.xlabel('Energy (keV)')
     plt.ylabel('Effective area (cm$^2$)')
-    ax1.set_ylim([0,1.5])
+    ax1.set_ylim([0,1])
     ax1.set_xlim([0,150])
     plt.title("Effective area of grids "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + '$\mu$m, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'$\mu$m' )
     ax1.legend(loc='upper right',fontsize='medium')
@@ -159,28 +160,30 @@ def plot_flare_counts(plotdata):
 
     slit_transmission_interp = np.interp(energy,slit_properties['energy'],slit_properties['transmission'])
     substrate_transmission_interp = np.interp(energy,substrate_properties['energy'],substrate_properties['transmission'])
+
+    thermal_counts=((substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp)*thth*fac) #thermal counts affected by the grid
+    nonthermal_counts=((substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp)*ntnt*fac) #nonthermal counts affected by the grid
     
     fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    #ax1.ylog(energy, eff_area, color="b", label="Planck")
-    ax1.loglog(energy, eff_area, color="r",label="total",linewidth='2')
-    ax1.loglog(energy, (substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp)*thth*fac, color="g",label="thermal")
-    ax1.loglog(energy, (substrate_properties['substrate_area']*substrate_transmission_interp - slit_properties['percent_area']*slit_transmission_interp)*ntnt*fac, color="b",label="non-thermal")
+    ax1 = fig.add_subplot(111)    #ax1.ylog(energy, eff_area, color="b", label="Planck")
+    ax1.semilogy(energy, eff_area, color="r",label="total",linewidth='2')
+    ax1.semilogy(energy, thermal_counts, color="g",label="thermal")
+    ax1.semilogy(energy, nonthermal_counts, color="b",label="non-thermal")
    # print np.mean(eff_area),np.min(eff_area),np.max(eff_area)
     
     plt.xlabel('Energy (keV)')
     plt.ylabel('Counts $s^{-1} keV^{-1}$')
-    ax1.set_ylim([10e-4,10e4])
-    ax1.set_xlim([1,1000])
+    ax1.set_ylim([1,1000])
+    ax1.set_xlim([0,150])
     plt.title("Flare counts, "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + '$\mu$m, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'$\mu$m' )
 
     #plt.title("Effective area of grids")
     ax1.legend(loc='upper right',fontsize='medium')
-
-    ax1.plot()
+    #ax1.plot()
 
     fig.show()
 
+    plotdata=[energy,eff_area,sub,slit,substrate_properties,slit_properties,ntnt,thth,fac,thermal_counts,nonthermal_counts]
     #save current plot data in pickle file
     pickle.dump(plotdata, open('plotdata.p','wb'))
 
@@ -188,8 +191,8 @@ def plot_flare_counts(plotdata):
 
 
 if __name__ == "__main__":
-    data=grid_eff_area(['Au','200'],['C','200'],distribution='uniform',attenuator=['Al','100'])
+    data=grid_eff_area(['Au','200'],['C','500'],distribution='uniform',attenuator=['Al','100'])
     #pprint.pprint(data)
     plot_eff_area(data)
-    data=grid_eff_area(['Au','200'],['C','200'],distribution='flare',attenuator=['Al','100'])
+    data=grid_eff_area(['Au','200'],['C','500'],distribution='flare',attenuator=['Al','100'])
     plot_flare_counts(data)
