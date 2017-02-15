@@ -1,7 +1,7 @@
 
  #######################################
-# widget_eff_area.py
-# Erica Lastufka 9/11/2016  
+# imager_widget.py
+# Erica Lastufka 9/2/17  
 
 #Description: Make the widget for getting effective area plots for the grids
 #######################################
@@ -9,24 +9,27 @@
 #######################################
 # Usage:
 
-# for default output: python widget_eff_area.py
+# for default output: python imager_widget.py
 ######################################
 
 from Tkinter import *
 
 class Imager_Widget(Frame):
+    '''Define and run the widget'''
     def __init__(self, parent=None, picks=[], side=LEFT, anchor=W):
-        choice = {'Substrate':{'Material':['C','Si','W','Polymer'],'Thickness':['100','300']},'Slits':{'Material':['Au','Au80Sn20','W'],'Thickness':['100','150','200','250','300']},'Attenuator':{'Material':['Be','Al','None'],'Thickness':['100','300']},'Detector':{'Material':['CdTe','Al','None'],'Thickness':['100','300']}}
+        choice = {'Substrate':{'Material':['C','Si','W','Polymer'],'Thickness':['200','300','400','500','1000']},'Slits':{'Material':['Au','Au80Sn20','W'],'Thickness':['100','150','200','250','300']},'Attenuator':{'Material':['Be','Al','None'],'Thickness':['50','100','300','500','1000']},'Detector':{'Material':['CdTe','Al','None'],'Thickness':['1000','2000','3000']},'Filled':{'choices':['Y','N']}}
         master = Tk()
         Frame.__init__(self, parent)
         self.vars=[]
         global ch
         ch=[]
-        master.wm_title('MiSolFA Simulator Input Selection')
-        Label(master,bg='light blue',text="Substrate:").grid(row=0,column=0,columnspan=2, sticky=W+E+N+S) #title? I think?
-        Label(master,bg='light blue', text="Slits:").grid(row=0,column=2,columnspan=2, sticky=W+E+N+S) #title? I think?
-        Label(master,bg='light blue', text="Detector:").grid(row=0,column=4,columnspan=2,sticky=W+E+N+S) #title? I think?
-        Label(master,bg='light blue', text="Attenuator:").grid(row=0,column=6,columnspan=2, sticky=W+E+N+S) #title? I think?
+        master.wm_title('MiSolFA Simulator Input Selection. Thickness in um')
+        Label(master,bg='light blue',text="Substrate:").grid(row=0,column=0,columnspan=2, sticky=W+E+N+S) 
+        Label(master,bg='light blue', text="Slits:").grid(row=0,column=2,columnspan=2, sticky=W+E+N+S)
+        Label(master,bg='light blue', text="Slits filled with substrate?:").grid(row=0,column=4,columnspan=2, sticky=W+E+N+S)
+        Label(master,bg='light blue', text="Detector:").grid(row=0,column=6,columnspan=2,sticky=W+E+N+S) 
+        Label(master,bg='light blue', text="Attenuator:").grid(row=0,column=8,columnspan=2, sticky=W+E+N+S) 
+
         for i,key in enumerate(reversed(sorted(choice.keys()))):
             for j,subkey in enumerate(choice[key].keys()):
                 for n,c in enumerate(choice[key][subkey]):
@@ -44,6 +47,7 @@ class Imager_Widget(Frame):
         mainloop()
 
     def identify_choices(self):
+        '''Format the output of the widget as attributes of self'''
         vector=[]
         for v in self.vars:
             vector.append(v.get())
