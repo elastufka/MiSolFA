@@ -4,48 +4,8 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import rc
 import scipy.constants as sc
+import diffraction as d
 
-def calc_functions(maxr,n,p,Rstar,mlambda, function):
-    x=np.arange(0,maxr,dtype=float)/(maxr) #this is still in meters right?
-    xstar = x/p
-    sum_Asubn = np.zeros((0))
-    if function == 'G1d':
-        sum_Bsubn = np.zeros((0))
-        sum_Asin = np.zeros((0))
-        sum_Acos = np.zeros((0))
-
-        for xx in xstar: #sum first - x* will remain the variable. This is for fixed R*.
-            sum_Asin = np.append(sum_Asin, np.sum(np.sin(2*np.pi*xx*(2*n+1)))) 
-            sum_Acos = np.append(sum_Acos, np.sum((np.cos(np.pi*Rstar*(2*n+1)**2))/(2*n+1))) 
-            sum_Asubn = np.append(sum_Asubn, np.sum(np.sin(2*np.pi*xx*(2*n+1))*np.cos(np.pi*Rstar*(2*n+1)**2)/(2*n+1))) 
-            sum_Bsubn = np.append(sum_Bsubn, np.sum(np.sin(2*np.pi*xx*(2*n+1))*np.sin(np.pi*Rstar*(2*n+1)**2)/(2*n+1))) 
-
-        G1d = .25 + (2/np.pi)*sum_Asubn + (4/np.pi**2)*(sum_Asubn**2+sum_Bsubn**2) #from eq 8
-        var=G1d
-
-    if function == 'Id' : #moire image. xstar is now xi
-        for xx in xstar:
-            sum_Asubn = np.append(sum_Asubn, np.sum(np.cos(2*np.pi*xx*(2*n+1))*np.cos(np.pi*Rstar*(2*n+1)**2)/(2*n+1)**2))
-        Id  = .25 + (2/np.pi**2)*sum_Asubn
-        var=Id
-    if function == 'C': #contrast - eq. 35. Now I is a function of R, not xi
-        #C(R*)=[Id'(R*)-Id'(R*=1/2)]/Id'(R*=1/2)]
-        xstar = 0.0
-
-        for rr in Rstar:
-           sum_Asubn = np.append(sum_Asubn,np.sum(np.cos(2*np.pi*xstar*(2*n+1))*np.cos(np.pi*rr*(2*n+1)**2)/(2*n+1))) #since xstar=0,simplify:
-           #sum_Asubn = np.append(sum_Asubn,np.sum(np.cos(np.pi*rr*(2*n+1)**2)/(2*n+1)**2))
-           
-        Id_Rhalf = np.zeros((len(Rstar)))+ .25 + (2/np.pi**2)*np.sum(np.cos(2*np.pi*xstar*(2*n+1))*np.cos(np.pi*.5*(2*n+1)**2)/(2*n+1))
-        #since xi=0, simplify:
-        #Id_Rhalf = np.zeros((maxr))+ .25 + (2/np.pi**2)*np.sum(np.cos(np.pi*.5*(2*n+1)**2)/(2*n+1)**2)
-        #well at least we verified that the results are the same. 
-        Id = .25 + (2/np.pi**2)*sum_Asubn
-        #print np.shape(sum_Asubn),np.shape(Id),np.shape(Id_Rhalf)
-        C=np.abs(Id-Id_Rhalf)/Id_Rhalf #what they plot is the absolute value, but then they fail to say that. Unless [] means absolute value in Israel?
-        var=Id#[C,Id,Id_Rhalf]
-        #print Id_Rhalf[0],Id[0],Id[maxr-1], np.sum(np.cos(np.pi*(2*n+1)**2)/(2*n+1)**2)
-    return var
 
 def plot_tests(xstar,var,xran,yran,title,label):
 
@@ -99,7 +59,7 @@ def plot_tests(xstar,var,xran,yran,title,label):
 #    ax.plot_surface(X, Y,var)
 #    fig.show()
 
-def make_plots():
+def reproduce_plots():
     '''reproduce plots from Bar Ziv 1985'''
     maxr=1000
     n=np.arange(0,maxr, dtype=float) #n for the sum
@@ -114,8 +74,8 @@ def make_plots():
     print Rstar, F1,Fm
     data,data2=[],[]
     for rr in Rstar:
-        data.append(calc_functions(maxr,n,p,rr,mlambda, 'G1d'))
-        data2.append(calc_functions(maxr,n,p,rr,mlambda, 'Id'))
+        data.append(d.calc_functions(maxr,n,p,rr,mlambda, 'G1d'))
+        data2.append(d.calc_functions(maxr,n,p,rr,mlambda, 'Id(x)'))
 
     x=np.arange(0,maxr,dtype=float)/(maxr) #this is still in meters right?
     xstar = x/p
@@ -127,47 +87,123 @@ def make_plots():
     Rstar = np.arange(0,maxr,dtype=float)/maxr
     Rstar[maxr-1]=1
 
-    data3= calc_functions(maxr,n,p,Rstar,mlambda, 'C')
+    data3= d.calc_functions(maxr,n,p,Rstar,mlambda, 'C')
     print np.shape(data3[2]),np.shape(Rstar)
     #yran=[np.min(data3),np.max(data3)]
     plot_tests(Rstar, data3,[0,1],[0,1], 'Contrast of Moire image', 'C')
 
-def make_misolfa_plots():
-    '''Now with parameters from MiSolFA grids'''
+def misolfa_G1d(maxr=1000):
+    '''Now with parameters from MiSolFA grids. Plot I(R*), and I(x) for a single grid -> G1d(x*)'''
+    #maxr=1000
+    n=np.arange(0,maxr, dtype=float) #n for the sum
+    xmm=n/maxr
+    p=np.array([0.015,0.03,0.045,0.09,0.18,0.225]) #pitch of finest grids = .015 mm
+    #xran=[0,8.8*10**-3] #moire period of 8.8mm
+    R=154.7 #150-200 mm
+    mlambda = 1.239*10**-7  # 10 keV in mm
+    #mlambda=6.199*10**-8 #20 keV to mm
+    #mlambda = 4.132*10**-8  # 30 keV in mm
+    Rstar1 = mlambda*R/p**2 # + delta#Fm + delta*F1 #R*mlambda/(p**2) #but I don't get square waves when R* = 1,2, ... like I should!
+    xstar,Rstar,data,data2=[],[],[],[]
+    x=n/maxr
+    
+    for rr,pp in zip(Rstar1,p):
+        data.append(d.calc_functions(maxr,n,pp,rr,mlambda, 'G1d')) #might need to modify the xrange on this
+        xstar.append(x/pp)
+    for pp in p:
+        Rstar.append((np.zeros((maxr)) +mlambda*R)/pp**2)
+        data2.append(d.calc_functions(maxr,n,pp,Rstar,mlambda, 'Id(R)'))
+    #yran=[0,np.max(data)]
+    #print np.shape(p),np.shape(data)
+    #print 'energy range', EkeV[0],EkeV[maxr-1],np.min(Rstar),np.max(Rstar)
+    
+    f,axes = plt.subplots(3,2, sharex=False,sharey=True)
+    title='lambda=620 A (20 keV), R=154.7mm'
+    for i,ax in enumerate(f.axes):
+        ax.plot(xstar[i], data[i], '.r-',label='p='+str(p[i])+'mm') #here xstar is Rstar
+        ax.set_xlim(0,1)
+        #ax.set_ylim(0,1)
+        ax.legend(loc='upper right',fontsize='small')
+    plt.suptitle(r"$G_{1d}$ intensity distribution calculated for pitches of MiSolFA grids, R=154.7mm, 10keV")
+    f.text(0.5, 0.04, 'x*', ha='center')
+    f.text(0.04, 0.5, 'Intensity', va='center', rotation='vertical')
+    #plt.savefig('G1d_R154_10keV.png')
+    f.show()
+
+def misolfa_G1dR():
+    '''Now with parameters from MiSolFA grids. Plot I(R*), and I(x) for a single grid -> G1d(x*)'''
     maxr=1000
     n=np.arange(0,maxr, dtype=float) #n for the sum
-    p= 15*10**-6 #pitch of finest grids = .015 mm
-    xran=[0,8.8*10**-3] #moire period of 8.8mm
-    R=.1547 #150-200 mm
-    mlambda = 6.206*10**-11#6.206^-12 median wavelength in 2-200 keV
-    delta = np.array([0.0,0.01,0.02,0.03,0.04]) #see eq. 33 and 34
-    #F1=np.array([p**2,p**2,p**2,p**2,p**2])/mlambda 
-    #m=[2,2,2,2,2]
-    #Fm = m*F1
-    Rstar = mlambda*R/p**2 + delta#Fm + delta*F1 #R*mlambda/(p**2) #but I don't get square waves when R* = 1,2, ... like I should!
-    print Rstar
-    data,data2=[],[]
-    for rr in Rstar:
-        data.append(calc_functions(maxr,n,p,rr,mlambda, 'G1d'))
-        data2.append(calc_functions(maxr,n,p,rr,mlambda, 'Id'))
+    xmm=n/maxr
+    p=np.array([0.015,0.03,0.045,0.09,0.18,0.225]) #pitch of finest grids = .015 mm
+    #xran=[0,8.8*10**-3] #moire period of 8.8mm
+  #  R=154.7 #150-200 mm
+    R=500*n/maxr
+    mlambda = 1.239*10**-7  # 10 keV in mm
+    #mlambda=6.199*10**-8 #20 keV to mm
+    #mlambda = 4.132*10**-8  # 30 keV in mm
+    #Rstar1 = mlambda*R/p**2 # + delta#Fm + delta*F1 #R*mlambda/(p**2) #but I don't get square waves when R* = 1,2, ... like I should!
+    xstar,Rstar,data,data2=[],[],[],[]
+    x=n/maxr
+    
+    for pp,i in zip(p,range(0,6)):
+        Rstar.append(np.zeros((maxr)) +mlambda*R/pp**2)
+        data.append(d.calc_functions(maxr,n,pp,Rstar[i],mlambda, 'G1d(R)')) #might need to modify the xrange on this
+        #xstar.append(x/pp)
+        print np.min(Rstar[i]),np.max(Rstar[i]),np.min(data[i]),np.max(data[i])
+    f,axes = plt.subplots(3,2, sharex=False,sharey=True)
+    title='lambda=620 A (20 keV), R=154.7mm'
+    for i,ax in enumerate(f.axes):
+        oldr=Rstar[i]*p[i]**2/mlambda
+        ax.plot(oldr, data[i], '.r-',label='p='+str(p[i])+'mm') #here xstar is Rstar
+        ax.set_xlim(0,10)
+        #ax.set_ylim(0,1)
+        ax.legend(loc='upper right',fontsize='small')
+    plt.suptitle(r"$G_{1d}(R*)$ intensity distribution calculated for pitches of MiSolFA grids, x*=0.2, 10keV")
+    f.text(0.5, 0.04, 'r (mm)', ha='center')
+    f.text(0.04, 0.5, 'G1d', va='center', rotation='vertical')
+    plt.savefig('G1d_x02_10keV.png')
+    f.show()
+    
+def misolfa_I_Rstar():
+    '''Now with parameters from MiSolFA grids. Plot I(R*), and I(x) for a single grid -> G1d(x*)'''
+    maxr=1000
+    n=np.arange(0,maxr, dtype=float) #n for the sum
+    xmm=n/maxr
+    p=np.array([0.015,0.03,0.045,0.09,0.18,0.225]) #pitch of finest grids = .015 mm
+    #xran=[0,8.8*10**-3] #moire period of 8.8mm
+    R=500*n/maxr #154.7 #150-200 mm
+    #mlambda = 1.239*10**-7  # 10 keV in mm
+    #mlambda=6.199*10**-8 #20 keV to mm
+    mlambda = 4.132*10**-8  # 30 keV in mm
+    #mlambda = 1.239*10**-7 * np.arange((maxr)) # 100 keV in mm
+    #mlambda[0]=1.239*10**-7 #to avoid divide by zero
+    #Rstar = mlambda*R/p**2 # + delta#Fm + delta*F1 #R*mlambda/(p**2) #but I don't get square waves when R* = 1,2, ... like I should!
+    xstar,Rstar,data=[],[],[]
+    x=n/maxr
+    
+    for pp,i in zip(p,range(0,6)):
+        Rstar.append(np.zeros((maxr)) +mlambda*R/pp**2)
+        data.append(d.calc_functions(maxr,n,pp,Rstar[i],mlambda, 'Id(R)'))
 
-    x=np.arange(0,maxr,dtype=float)/(1.5*10**9) #this is still in meters right? so let's use nano
-    xstar = x/p
-    #print np.min(data),np.max(data),np.min(data2),np.max(data2),np.max(x),np.max(xstar),xran[1]
-    yran=[np.min(data2),np.max(data2)]
-    #data=calc_functions(maxr,n,p,R,mlambda, 'G1d')
-    #plot_tests(xstar,data) #reproduce fig 2A
-    plot_tests(xstar,data2, [0,p*10],yran,'Moire intensity for MiSolFA grids','Id')
-
-    Rstar =Rstar[0]/2+ np.arange(0,maxr,dtype=float)/maxr
-    print np.min(Rstar),np.max(Rstar)
-
-    data3= calc_functions(maxr,n,p,Rstar,mlambda, 'C')
-    yran=[np.min(data3[0]),np.max(data3[0])]
-    print yran
-    plot_tests(Rstar, data3,[0,Rstar[0]],yran, 'Contrast of Moire image', 'C')
-
+    print R[309], R[416],data[5][309],data[5][416]
+    #print np.shape(data)
+    f,axes = plt.subplots(3,2, sharex=True,sharey=True)
+    title='lambda=620 A (20 keV), R=154.7mm'
+    for i,ax in enumerate(f.axes):
+        print np.shape(data[i])
+        ax.plot(R, data[i], '.r-',label='p='+str(p[i])+'mm') #here xstar is Rstar
+        ax.set_xlim(0,500)
+        ax.set_ylim(0,1)
+        ax.legend(loc='lower right',fontsize='medium')
+    plt.suptitle(r"Moir$\'{e}$ Intensity, 30 keV. Maximum "+ str(data[5][309]) + " (154 mm) and " +str(data[5][416]) + " (208 mm)")
+    f.text(0.5, 0.04, 'R (mm)', ha='center')
+    f.text(0.04, 0.5, 'Intensity', va='center', rotation='vertical')
+    plt.savefig('Id(R)_30keV.png')
+    f.show()
+        
 def plot_pitch_contrast():
+    '''docstring'''
     p=np.array([0.015,0.03,0.045,0.09,0.18,0.225]) #mm. Let's us mm for everything!
     data=[]
     maxr=1000
@@ -178,7 +214,7 @@ def plot_pitch_contrast():
     print p,Rstar
     xran=[np.min(Rstar),np.max(Rstar)]
     for pp in p:
-        data.append(calc_functions(maxr,n,pp,Rstar,mlambda, 'C'))
+        data.append(d.calc_functions(maxr,n,pp,Rstar,mlambda, 'Id(R)'))
     #data=data*10**10
     yran=[0,np.max(data)]
     print np.shape(p),np.shape(data)
@@ -198,7 +234,8 @@ def plot_pitch_contrast():
 
     f.show()
 
-def plot_energy_intensity():
+def plot_energy_intensity(p,R):
+    '''intensity as a function of energy for the pitches of the Misolfa grids. length units are mm'''
     #p=np.array([0.015,0.03,0.045,0.09,0.18,0.225]) #mm. Let's us mm for everything!
     p=np.array([0.0200,0.0240,0.0300,0.0400,0.0600,0.1200])
 
@@ -212,12 +249,15 @@ def plot_energy_intensity():
     xran=[np.min(EkeV),np.max(EkeV)]
     for pp in p:
         Rstar = (np.zeros((maxr)) +mlambda*R)/pp**2
+        #EkeV = np.arange(1,1001,dtype=float)/10
+        #Rstar = sc.h*sc.c*R/(EkeV*pp**2)
         data.append(calc_functions(maxr,n,pp,Rstar,mlambda, 'C'))
     print np.shape(data),np.shape(data[0]),np.mean(data[0]),np.max(data[0])
     yran=[0,np.max(data)]
     #print np.shape(p),np.shape(data)
-    print 'energy range', EkeV[0],EkeV[maxr-1]
-    #plot_tests(p,data,xran,yran,'Contrast of Moire image, R=154.7mm','Id')
+    print 'energy range', EkeV[0],EkeV[maxr-1],np.min(Rstar),np.max(Rstar)
+
+    #interpolate to make axis uniform in energy? or do that earlier?
     
     f,axes = plt.subplots(3,2, sharex=True,sharey=True)
     title='lambda=620 A (20 keV), R=154.7mm'
@@ -231,3 +271,9 @@ def plot_energy_intensity():
     f.text(0.04, 0.5, 'Intensity', va='center', rotation='vertical')
 
     f.show()
+
+#p=np.array([0.015,0.03,0.045,0.09,0.18,0.225])
+#plot_energy_intensity(p,154.7)
+#p=np.array([0.0200,0.0240,0.0300,0.0400,0.0600,0.1200])
+#plot_energy_intensity(p,206)
+
