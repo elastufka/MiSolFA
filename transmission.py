@@ -33,8 +33,8 @@ def read_data(elementf):
     data=genfromtxt(filename,delimiter=',') #column 0 will be NaN because it's text
     datadim = np.shape(data) #get dimensions
 
-
-    data_dict = {header[0]:data[1:datadim[0],0], header[1]:data[1:datadim[0],1],header[2]:data[1:datadim[0],2],header[3]:data[1:datadim[0],3],header[4]:data[1:datadim[0],4],header[5]:data[1:datadim[0],5],header[6]:data[1:datadim[0],6]}
+    data_dict={header[i]:data[1:datadim[0],i] for i in range(0,len(header))}
+    #data_dict = {header[0]:data[1:datadim[0],0], header[1]:data[1:datadim[0],1],header[2]:data[1:datadim[0],2],header[3]:data[1:datadim[0],3],header[4]:data[1:datadim[0],4],header[5]:data[1:datadim[0],5],header[6]:data[1:datadim[0],6]}
     return data_dict
 
 def Wien_approx(energy):
@@ -116,29 +116,28 @@ def plot_data(element,data_dict,thickness='thickness'):
     '''Plot E vs T and E vs counts for given element and thickness'''
     colors=['b','g','r','c','m']
     fig = plt.figure()
-    ax1 = fig.add_subplot(212)
+    ax1 = fig.add_subplot(111)
     plt.xlabel('Energy (keV)')
     plt.ylabel('Transmission')
     ax1.set_ylim([10e-50,10e0])
-    ax1.set_xlim([1,100])
-    ax1.legend(loc='lower right',fontsize='medium')
+    ax1.set_xlim([0,50])
 
-    ax2 = plt.subplot(211)
+    #ax2 = plt.subplot(211)
     #plt.xlabel('Energy (keV)')
-    plt.ylabel('Counts')
-    ax2.set_ylim([1,10e20])
-    ax2.set_xlim([1,100])
+    #plt.ylabel('Counts')
+    #ax2.set_ylim([1,10e20])
+    #ax2.set_xlim([1,100])
 
 
     if thickness != 'thickness': #to compare different elements - now it is a list of dictionaries,not just a dictionary. So get the keys
         keys=data_dict[0].keys()
-        plt.title(thickness+ ' um thickness')
+        plt.title(thickness+ ' $\mu$m thickness')
         for item in range(0,np.size(data_dict)): #find the data with the right thickness
             for key in keys:
                 if thickness in key:
                     x1=data_dict[item]['E (keV)'] 
-                    ax1.loglog(x1, data_dict[item][key], marker="s", c=colors[item],label=data_dict[item]['element'])
-                    ax2.loglog(x1,calc_counts(data_dict[item], key), marker="s", c=colors[item])
+                    ax1.semilogy(x1, data_dict[item][key], marker="s", c=colors[item],label=data_dict[item]['element'])
+                    #ax2.loglog(x1,calc_counts(data_dict[item], key), marker="s", c=colors[item])
                     #fig.show()
       
       
@@ -150,11 +149,80 @@ def plot_data(element,data_dict,thickness='thickness'):
         for key in keys:
             if key.startswith('P'):
                 print key
-                ax1.loglog(x1, data_dict[key], marker="s", c=colors[n],label=key)
-                ax2.loglog(x1,calc_counts(data_dict, key),marker="s", c=colors[n])
-                n=n+1     
+                x1=data_dict['E (keV)']
+                ax1.semilogy(x1, data_dict[key], marker="s", c=colors[n],label=key)
+                #ax2.loglog(x1,calc_counts(data_dict, key),marker="s", c=colors[n])
+                n=n+1
+                
+    ax1.legend(loc='lower right',fontsize='medium')
 
     return fig
+
+def plot_cover(element,data_dict,thickness=[.1,.15,.2], log=True): #thickness in cm
+    '''Plot E vs T and E vs counts for given element and thickness'''
+    colors=['b','g','r','c','m']
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    plt.xlabel('Energy (keV)')
+    plt.ylabel('Transmission')
+    #ax1.set_ylim([10e-10,10e0])
+    ax1.set_xlim([0,80])
+
+    plt.title('Transmission of ' + element + ' at various (total) thicknesses')
+    for i,thick in enumerate(thickness):
+        pxi = np.exp(data_dict['a (cm^2/g)']*data_dict['rho (g/cm^3)'][0]*thick*-1) #calculate P(xi)
+        print np.min(pxi),np.max(pxi)
+        x1=data_dict['E (keV)']
+        if log:
+            ax1.semilogy(x1, pxi, marker="s", c=colors[i],label=str(thick)+' cm')
+            ax1.set_ylim([10e-10,10e0])
+            loc= 'lower right'
+        else:
+             ax1.plot(x1, pxi, marker="s", c=colors[i],label=str(thick)+' cm')
+             ax1.set_ylim([0,1])
+             loc='upper left'
+                 
+    ax1.legend(loc=loc,fontsize='medium')
+    fig.show()
+    
+    return fig
+
+def plot_cover_compare(elements,densities,thickness,log=True):
+    '''Plot E vs T and E vs counts for given elements and thicknesses'''
+    colors=['b','g','r','c','m']
+    markers=['s','o','v','*']
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    plt.xlabel('Energy (keV)')
+    plt.ylabel('Transmission')
+    #ax1.set_ylim([10e-10,10e0])
+    ax1.set_xlim([0,80])
+
+    plt.title('Transmission of ' +', '.join(el for el in elements)  + ' at various (total) thicknesses')
+    for j,el in enumerate(elements):
+        #get the data dictionary
+        data_dict=read_data(el+'.csv')
+        if not'rho (g/cm^3)' in data_dict.keys():
+            data_dict['rho (g/cm^3)']=[densities[j]]
+        color=colors[j]
+        for i,thick in enumerate(thickness):
+            pxi = np.exp(data_dict['a (cm^2/g)']*data_dict['rho (g/cm^3)'][0]*thick*-1) #calculate P(xi)
+            print np.min(pxi),np.max(pxi)
+            x1=data_dict['E (keV)']
+            if log:
+                ax1.semilogy(x1, pxi, marker=markers[i], c=color,label=str(thick)+' cm '+el)
+                ax1.set_ylim([10e-10,10e0])
+                loc= 'lower right'
+            else:
+                ax1.plot(x1, pxi, marker=markers[i], c=color,label=str(thick)+' cm '+el)
+                ax1.set_ylim([0,1])
+                loc='upper left'
+                 
+    ax1.legend(loc=loc,fontsize='medium')
+    fig.show()
+    
+    return fig
+
 
 #convert figure to data
 def fig2data ( fig ):
@@ -187,27 +255,35 @@ def fig2image(fig):
     w, h, d = buf.shape
     return Image.frombytes( "RGBA", ( w ,h ), buf.tostring( ) )
 
-def compare_thickness(elements=0):
+def compare_thickness(elements=0, show=0,ymin=10**-15):
     '''Make plots for various thicknesses and output to pdf'''
 
     if elements is 0:
-         elements=['W','Au','Au80Sn20','Si','Be','Al']
+         elements=['W','Au','Au80Sn20','Si', 'C', 'Polymer']
 
      #assume 6 elements
     newfig, axes = plt.subplots(3, 2, figsize=(10, 12),
                          subplot_kw={'xticks': [], 'yticks': []})
     plt.subplots_adjust(wspace=0,hspace=0)
 
-    for element, ax in zip(elements,axes.flat):
-         data_dict=read_data(element+'.csv')
-         fig=plot_data(element,data_dict)
-         image= fig2image(fig)
-         ax.imshow(image,interpolation='none')
+    if show:
+        for element,ax in zip(elements,axes.flat):
+            data_dict=read_data(element+'.csv')
+            fig=plot_data(element,data_dict)
+            ax.set_ylim([.000001,.1])
+            fig.show()
+
+    if not show:
+         for element, ax in zip(elements,axes.flat):
+             data_dict=read_data(element+'.csv')
+             fig=plot_data(element,data_dict)
+             image= fig2image(fig)
+             ax.imshow(image,interpolation='none')
 
      #newfig.show()
     newfig.savefig('compare_thickness.pdf',dpi=300)
 
-def compare_elements(elements=0, thickness=0): #thickness is also an array
+def compare_elements(elements=0, thickness=0, show=0,ymin=10**-15): #thickness is also an array
     '''Make plots for various elements and output to pdf'''
     if elements is 0:
         elements=['W','Au','Au80Sn20']
@@ -226,24 +302,34 @@ def compare_elements(elements=0, thickness=0): #thickness is also an array
                          subplot_kw={'xticks': [], 'yticks': []})
     plt.subplots_adjust(wspace=0,hspace=0)
 
-    for thick,ax in zip(thickness,axes.flat):
-        fig = plot_data('foo',list_dict,thickness=thick)
-        image= fig2image(fig)
-        ax.imshow(image,interpolation='none')
+    if show:
+        for thick,ax in zip(thickness,axes.flat):
+            fig = plot_data('foo',list_dict,thickness=thick)
+            ax.set_ylim([.0000001,.1])
+            fig.show()
 
-    planckfig=Planckfig(Planck(list_dict[0]['E (keV)']),list_dict[0]['E (keV)'])#let's plot the Planck disttribution in the final spot   
-    planckimage=fig2image(planckfig)
-    axes.flat[5].imshow(planckimage,interpolation='none')
+    if not show:
+        
+        for thick,ax in zip(thickness,axes.flat):
+            fig = plot_data('foo',list_dict,thickness=thick)
+            image= fig2image(fig)
+            ax.imshow(image,interpolation='none')
 
-    newfig.savefig('compare_elements.pdf',dpi=300)
+        planckfig=Planckfig(Planck(list_dict[0]['E (keV)']),list_dict[0]['E (keV)'])#let's plot the Planck disttribution in the final spot   
+        planckimage=fig2image(planckfig)
+        axes.flat[5].imshow(planckimage,interpolation='none')
 
+        newfig.savefig('compare_elements.pdf',dpi=300)
+
+    
 #if __name__ == "__main__":
 
-#compare_thickness(['W','Au','Au80Sn20','Si','Be','Al'])
-#compare_elements(['W','Au','Au80Sn20'], ['100','150','200','250','300'])
+os.chdir('../../calculations/data')
+#compare_thickness(['W','Ti','Steel'], show=1)
+#compare_elements(['W','Ti','Steel'], ['100','150','200','250','300'],show=1)
 #compare_elements()
 #compare_thickness()
 #data_dict=read_data('Au.csv')
-en=np.linspace(1,100000,200)
+#en=np.linspace(1,100000,200)
 
-DistributionFig(Planck(en), MaxwellBoltzmann(en), en)
+#DistributionFig(Planck(en), MaxwellBoltzmann(en), en)
