@@ -205,9 +205,9 @@ def plot_flare_counts(plotdata):
     
     plt.xlabel('Energy (keV)')
     plt.ylabel('Counts $s^{-1} keV^{-1}$')
-    ax1.set_ylim([1,1000])
+    ax1.set_ylim([1,10000])
     ax1.set_xlim([0,150])
-    plt.title("Expected flare counts for grids "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + '$\mu$m, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'$\mu$m with ' + atype[0] + ' '+ atype[1]+'$\mu$m attenuator')
+    plt.title("Expected flare counts for grids "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + '$\mu$m, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'$\mu$m'# with ' + atype[0] + ' '+ atype[1]+'$\mu$m attenuator')
 
     #plt.title("Effective area of grids")
     ax1.legend(loc='upper right',fontsize='medium')
