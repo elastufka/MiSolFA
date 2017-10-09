@@ -23,6 +23,7 @@ import imager
 import pickle
 import os
 import numpy as np
+from pprint import pprint
 
 class Simulator_GUI(Frame):
     '''Define and run the widget'''
@@ -115,8 +116,6 @@ class Simulator_GUI(Frame):
         self.classinst.print_config()
 
     def identify_choices(self):    
-        #create instance of class Imager as an attribute of self
-        self.classinst = imager.Imager(widget=False)
         vector=[]
         for v in self.vars:
             vector.append(v.get())
@@ -126,8 +125,25 @@ class Simulator_GUI(Frame):
                 att = ch[i][ch[i].find(' '):ch[i].rfind(' ')].lstrip()
                 quant=ch[i][ch[i].rfind(' '):].lstrip()
                 #print part+'.'+att,quant
-                setattr(self.classinst,part+'_'+att,quant) #this assignes the attributes to the Imager object now!
-
+                setattr(self,part+'_'+att,quant)
+        #now assign to arguments to initialize Imager object with
+        if self.Attenuator_Material !='None':
+            att=[self.Attenuator_Material,self.Attenuator_Thickness]
+        else:
+            att= False
+        sl=[self.Slits_Material,self.Slits_Thickness]
+        su=[self.Substrate_Material,self.Substrate_Thickness]
+        if self.Filled_choices =='Y':
+            fc=True#{'Material':self.Substrate_Material,'Thickness':self.Substrate_Thickness}
+        else:
+            fc=False
+        if self.Detector_Material !='None':
+            det=[self.Detector_Material,self.Detector_Thickness]
+        else:
+            det= False
+        self.classinst = imager.Imager(widget=False, attenuator=att,slits=sl,substrate=su,filled=fc,detector=det) #create instance of class Imager as an attribute of self
+        #pprint(vars(self.classinst))
+        
     def refresh(self):
         root.update()
         
@@ -151,7 +167,7 @@ class Simulator_GUI(Frame):
             self.a.plot(data.slits['Energy'], data.attenuator['Transmission'], color="m",label="attenuator+\ndetector (1mm CdTe)",linewidth='2') #make the label better
         except TypeError:
             pass
-        self.a.set_.xlabel('Energy (keV)')
+        self.a.set_xlabel('Energy (keV)')
         self.a.set_ylabel('Effective area (cm$^2$)')
         self.a.set_ylim([0,1])
         self.a.set_xlim([0,150])
@@ -179,7 +195,7 @@ class Simulator_GUI(Frame):
 
         self.b.set_xlabel('Energy (keV)')
         self.b.set_ylabel('Counts $s^{-1} keV^{-1}$')
-        self.b.set_ylim([1,1000])
+        self.b.set_ylim([1,10000])
         self.b.set_xlim([0,150])
         plt.title("Expected flare count for grids "+ data.substrate['Material'] + ' '+ data.substrate['Thickness'] + '$\mu$m, ' + data.slits['Material'] + ' '+data.slits['Thickness'] +'$\mu$m with ' +'$\mu$m attenuator')
         self.b.legend(loc='upper right',fontsize='small')
@@ -207,7 +223,7 @@ class Simulator_GUI(Frame):
         
     def export2csv(self,csvname=False):
         if not csvname:
-            csvname = '/test.csv'
+            csvname = 'test.csv'
         self.classinst.export2csv(csvname=csvname)
         toplevel=Toplevel()
         Label(toplevel,text="Exported to csv file " +os.getcwd()+ csvname).grid(row=0,column=0,columnspan=2, sticky=W+E+N+S) 

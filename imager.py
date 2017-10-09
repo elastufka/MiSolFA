@@ -74,7 +74,7 @@ class Imager(object):
      
             self.attenuator = attenuator
             if w.Attenuator_Material!='None': # attenuator chosen
-                self.attenuator = {'Material':w.Attenuator_Material,'Thickness':w.Attenuator_Thickness,'Transmission':1, 'Energy':[], 'eff_area':[]} 
+                self.attenuator = {'Material':w.Attenuator_Material,'Thickness':w.Attenuator_Thickness,'Transmission':1, 'Energy':[], 'eff_area':[]}
             self.slits = {'Material':w.Slits_Material, 'Thickness':w.Slits_Thickness,'Percent_area':0.5,'Transmission':[], 'Energy':[]}
             self.substrate = {'Material':w.Substrate_Material, 'Thickness':w.Substrate_Thickness,'Substrate_area':1,'Transmission':[], 'Energy':[]}
             self.filled = filled
@@ -102,7 +102,7 @@ class Imager(object):
             thicknesses.append(self.detector['Thickness'])
             array[1] = 1
         if self.filled:
-            filenames.append(self.filled['Material']+'.csv') 
+            filenames.append(self.substrate['Material']+'.csv') 
             thicknesses.append(self.slits['Thickness']) #thickness is the same as slit thickness
             array[2] = 1
             
@@ -203,9 +203,13 @@ class Imager(object):
     def print_config(self):
         '''print the relevant information about the imager'''
         print 'Substrate:  ' + self.substrate['Thickness'] + ' um of ' + self.substrate['Material'] 
-        print 'Slits:      ' + self.slits['Thickness'] + ' um of ' + self.slits['Material'] 
-        print 'Attenuator: ' + self.attenuator['Thickness'] + ' um of ' + self.attenuator['Material'] 
-        print 'Detector:   ' + self.detector['Thickness'] + ' um of ' + self.detector['Material'] 
+        print 'Slits:      ' + self.slits['Thickness'] + ' um of ' + self.slits['Material']
+        #print self.attenuator
+        #if self.attenuator:
+        #    print 'Attenuator: ' + self.attenuator['Thickness'] + ' um of ' + self.attenuator['Material']
+        #print self.detector
+        #if self.detector:
+        #    print 'Detector:   ' + self.detector['Thickness'] + ' um of ' + self.detector['Material'] 
   
     def export2pickle(self, picklename):
         ''' Saves the data object in a .p file'''
