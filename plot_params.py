@@ -10,40 +10,70 @@ Get data to dictionaries. plot.
 import glob
 import pickle
 import os
+#from edge_and_hough import windows as windowsf
+#from edge_and_hough import windowsr
 
+#print windowsf[0]['pitch'],windowsf[0]['nominal angle']
 def load_dict(front_dir='/Users/wheatley/Documents/Solar/MiSolFA/prototypes/mw469sub2737_2017_06_01',rear_dir='/Users/wheatley/Documents/Solar/MiSolFA/prototypes/mw469sub2765_2017_06_02',mag=5.0):
-    windows=[{'side':'f','number':11,'npitch':0.12,  'nangle':-44.72509,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':21,'pitch':0.12,  'nangle': 45.27757,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':12,'pitch':0.03,'nangle': 44.93102,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':22,'pitch':0.03,'nangle':-45.06914,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':31,'pitch':0.06, 'nangle':-45.13845,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':41,'pitch':0.06, 'nangle': 44.86222,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':32,'pitch':0.025, 'nangle': 45.05530,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':42,'pitch':0.025, 'nangle':-44.94481,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':33,'pitch':0.04,  'nangle':-44.90807,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':43,'pitch':0.04,  'nangle': 45.09223,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':34,'pitch':0.020, 'nangle': 44.954,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'f','number':44,'pitch':0.02, 'nangle':-45.04608,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':11,'npitch':0.12,  'nangle':45.27757,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':21,'pitch':0.12,  'nangle': -44.72509,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':12,'pitch':0.03,'nangle': -45.06914,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':22,'pitch':0.03,'nangle':44.93102,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':31,'pitch':0.06, 'nangle':44.86222,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':41,'pitch':0.06, 'nangle': -45.13845,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':32,'pitch':0.025, 'nangle': -44.94481,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':42,'pitch':0.025, 'nangle':45.0553,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':33,'pitch':0.04,  'nangle':45.09223,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':43,'pitch':0.04,  'nangle': -44.90807,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':34,'pitch':0.02, 'nangle': -45.04608,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
-                {'side':'r','number':44,'pitch':0.02, 'nangle':44.954,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0}]
+    windowsf=[{'number':11,'pitch':89.6752,  'nominal angle':-44.79357},
+                {'number':21,'pitch':90.326,  'nominal angle': 45.20793},
+                {'number':12,'pitch':22.4797,'nominal angle': 44.94825},
+                {'number':22,'pitch':22.5203,'nominal angle':-45.05184},
+                {'number':31,'pitch':45.0814, 'nominal angle':-45.10378},
+                {'number':41,'pitch':44.9187, 'nominal angle': 44.8966},
+                {'number':32,'pitch':18.013, 'nominal angle': 45.04146},
+                {'number':42,'pitch':17.987, 'nominal angle':-44.95859},
+                {'number':33,'pitch':29.9639,  'nominal angle':-44.93102},
+                {'number':43,'pitch':30.0362,  'nominal angle': 45.06914},
+                {'number':34,'pitch':14.991, 'nominal angle': 44.96549},
+                {'number':44,'pitch':15.009, 'nominal angle':-45.03455}]
+
+    windowsr=[{'number':11,'pitch':90.326,  'nominal angle':-45.20793},
+                {'number':21,'pitch':89.6752,  'nominal angle': 44.79357},
+                {'number':12,'pitch':22.5203,'nominal angle': 45.05184},
+                {'number':22,'pitch':22.4797,'nominal angle':-44.94825},
+                {'number':31,'pitch':44.9187, 'nominal angle':-44.8966},
+                {'number':41,'pitch':45.0814, 'nominal angle': 45.10378},
+                {'number':32,'pitch':17.987, 'nominal angle': 44.95859},
+                {'number':42,'pitch':18.013, 'nominal angle':-45.04146},
+                {'number':33,'pitch':30.0362,  'nominal angle':-45.06914},
+                {'number':43,'pitch':29.9639,  'nominal angle': 44.93102},
+                {'number':34,'pitch':15.009, 'nominal angle': 45.03455},
+                {'number':44,'pitch':14.991, 'nominal angle':-44.96549}] #dectector side angle for ease, windows swapped...
+
+    
+    windows=[{'side':'f','number':11,'pitch':windowsf[0]['pitch'],  'nangle':windowsf[0]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':21,'pitch':windowsf[1]['pitch'],  'nangle': windowsf[1]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':12,'pitch':windowsf[2]['pitch'],'nangle': windowsf[2]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':22,'pitch':windowsf[3]['pitch'],'nangle':windowsf[3]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':31,'pitch':windowsf[4]['pitch'], 'nangle':windowsf[4]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':41,'pitch':windowsf[5]['pitch'], 'nangle': windowsf[5]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':32,'pitch':windowsf[6]['pitch'], 'nangle':windowsf[6]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':42,'pitch':windowsf[7]['pitch'], 'nangle':windowsf[7]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':33,'pitch':windowsf[8]['pitch'],  'nangle':windowsf[8]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':43,'pitch':windowsf[9]['pitch'],  'nangle': windowsf[9]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':34,'pitch':windowsf[10]['pitch'], 'nangle': windowsf[10]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'f','number':44,'pitch':windowsf[11]['pitch'], 'nangle':windowsf[11]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':11,'pitch':windowsr[0]['pitch'],  'nangle':windowsr[0]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':21,'pitch':windowsr[1]['pitch'],  'nangle': windowsr[1]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':12,'pitch':windowsr[2]['pitch'],'nangle':windowsr[2]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':22,'pitch':windowsr[3]['pitch'],'nangle':windowsr[3]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':31,'pitch':windowsr[4]['pitch'], 'nangle':windowsr[4]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':41,'pitch':windowsr[5]['pitch'], 'nangle':windowsr[5]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':32,'pitch':windowsr[6]['pitch'], 'nangle':windowsr[6]['nominal angle'] ,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':42,'pitch':windowsr[7]['pitch'], 'nangle':windowsr[7]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':33,'pitch':windowsr[8]['pitch'],  'nangle':windowsr[8]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':43,'pitch':windowsr[9]['pitch'],  'nangle':windowsr[9]['nominal angle'] ,'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':34,'pitch':windowsr[10]['pitch'], 'nangle': windowsr[10]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0},
+                {'side':'r','number':44,'pitch':windowsr[11]['pitch'], 'nangle':windowsr[1]['nominal angle'],'pmean':0.0,'pmed':0.0,'pvar':0.0,'amean':0.0,'amed':0.0,'avar':0.0}]
 
     
     #frontdir='/Users/wheatley/Documents/Solar/MiSolFA/prototypes/mw469sub2737_2017_06_01'
     #reardir='/Users/wheatley/Documents/Solar/MiSolFA/prototypes/mw469sub2765_2017_06_02'
 
     os.chdir(front_dir)
-    #statfiles=glob.glob('*stats*'+str(mag)+'.p')
-    statfiles=glob.glob('*stats.p')
+    statfiles=glob.glob('*stats*'+str(mag)+'.p')
+    #statfiles=glob.glob('*stats.p')
     for sf in statfiles:
         win=sf[3:5]
         idx=[i for i in range(0,12) if windows[i]['number']==int(win)][0]
@@ -58,8 +88,8 @@ def load_dict(front_dir='/Users/wheatley/Documents/Solar/MiSolFA/prototypes/mw46
             windows[idx]['avar']=sdict['stddev']
             
     os.chdir(rear_dir)
-    #statfiles=glob.glob('*stats*'+str(mag)+'.p')
-    statfiles=glob.glob('*stats.p')
+    statfiles=glob.glob('*stats*'+str(mag)+'.p')
+    #statfiles=glob.glob('*stats.p')
     for sf in statfiles:
         win=sf[3:5]
         idx=[i for i in range(12,24) if windows[i]['number']==int(win)][0]
@@ -74,7 +104,7 @@ def load_dict(front_dir='/Users/wheatley/Documents/Solar/MiSolFA/prototypes/mw46
             windows[idx]['avar']=sdict['stddev']
 
     os.chdir('../')
-    pickle.dump(windows,open('windows.p','wb'))
+    pickle.dump(windows,open('windows'+str(mag)+'.p','wb'))
     return windows
 
 def repickle():
@@ -108,27 +138,26 @@ def plot_params(window,title1='Front Assembly',title2='Rear Assembly',ptype=Fals
 
     #front window - pitch vs. expected values
     wnums=[window[i]['number'] for i in range(0,12)]
+    nomsa=[window[i]['nangle'] for i in range(0,12)]
     pmeans=[window[i]['pmean'] for i in range(0,12)]
+    print pmeans
     perrs=[window[i]['pvar'] for i in range(0,12)]
     noms=[]
     for i in range(0,12):
-        try:
-            noms.append(window[i]['npitch']*1000)
-        except KeyError:
-            noms.append(window[i]['pitch']*1000)
+        noms.append(window[i]['pitch'])
     x=np.linspace(1,12,12)
     fig,ax=plt.subplots()
     ax.errorbar(x, np.array(pmeans)-np.array(noms), yerr=np.array(perrs),
             fmt='o', ecolor='g', capthick=2)
     #pl.plot(x, y, 'k', color='#CC4F1B')
-    ax.fill_between(x,-error, error,alpha=0.5, facecolor='#FF9848')
+    #ax.fill_between(x,-error, error,alpha=0.5, facecolor='#FF9848')
     ax.set_xticks(x)
     ax.set_xticklabels(wnums)
     ax.set_title(title1)
     ax.set_xlabel('Window Number')
     ax.set_xlim([0,13])
-    ax.set_ylim([-15,15])
-    ax.set_ylabel('Mean Width - Nominal Width, $\mu$m')
+    ax.set_ylim([-2,2])
+    ax.set_ylabel('Mean Pitch - Nominal Pitch, $\mu$m')
     fig.show()
     #return noms
     
@@ -199,15 +228,12 @@ def plot_params(window,title1='Front Assembly',title2='Rear Assembly',ptype=Fals
         nwins=[window[0],window[1],window[2],window[3],window[4],window[5],window[6],window[7],window[8],window[9],window[10],window[11],window[13],window[12],window[15],window[14],window[17],window[16],window[19],window[18],window[21],window[20],window[23],window[22]]
         window=nwins
 
-        
+    nomsa=[window[i]['nangle'] for i in range(12,24)]        
     pmeans=[window[i]['pmean'] for i in range(12,24)]
     perrs=[window[i]['pvar'] for i in range(12,24)]
     noms=[]
     for i in range(0,12):
-        try:
-            noms.append(window[i]['npitch']*1000)
-        except KeyError:
-            noms.append(window[i]['pitch']*1000)
+        noms.append(window[i]['pitch'])
     x=np.linspace(1,12,12)
     fig,ax=plt.subplots()
     ax.errorbar(x, np.array(pmeans)-np.array(noms), yerr=np.array(perrs),
@@ -250,9 +276,9 @@ def plot_params(window,title1='Front Assembly',title2='Rear Assembly',ptype=Fals
     return window
 
 def rv(value):
-    return str(np.round([value],decimals=2)[0])
+    return str(np.round([value],decimals=4)[0])
 
-def dict2tex(window):
+def dict2tex(window,filename=False):
     front=window[:12]
     rear=window[12:]
     fwlines,falines,rwlines,ralines=[],[],[],[]
@@ -269,7 +295,9 @@ def dict2tex(window):
            
     lines=[fwlines[i]+falines[i]+rwlines[i]+ralines[i] for i in range(0,len(fwlines))]
     os.chdir('../')
-    with open('results_table.txt','wb') as f:
+    if not filename:
+        filename='results_table.txt'
+    with open(filename,'wb') as f:
         f.write('\n'.join(lines))
     #print os.get_cwd()
 
