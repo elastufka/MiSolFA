@@ -19,6 +19,7 @@ import pickle
 from scipy.misc import imrotate
 from scipy.ndimage.interpolation import rotate
 import time
+import glob
 
 #list of dictionaries of the window numbers, pitches (mm), and nominal angles (deg)
 global windows
@@ -84,6 +85,8 @@ def get_index(filen):
         filen=filen[filen.find('win')-1:]
     windex=filen[filen.find('win')+3:filen.find('_')]
     indices=filen[filen.find('_')+1:filen.rfind('5.0')-1]
+    if indices.endswith('_'):
+        indices= indices[:-1]
     index=[indices[:2],indices[3:]]
     return windex,index
 
@@ -93,7 +96,7 @@ def im2ndarray(filen):
     im=np.array(imraw)
     return im
 
-def remove_edges(filen,im,maxx='09',maxy='12'):
+def remove_edges(filen,im,maxx='09',maxy='13'):
     '''remove edges from images with edges of the window in them'''
     if filen.endswith('.p') or filen.endswith('mosaic.tiff'):
         imshape=np.shape(im)
@@ -232,12 +235,12 @@ def Canny_edge(filen,sigma=3,mag=5.0,gauss=False,plot=False,outfilen=False):
     windex,foo=get_index(filen)
     if windex in ['32','42','34','44']: #although I should actually use the dictionary keys to do this stuff in case we change the naming convention
         sigma=2
-    #if windex in ['11','21']: #although I should actually use the dictionary keys to do this stuff in case we change the naming convention
-    #    sigma=3
-    #    gauss=3
+    if windex in ['11','21']: #although I should actually use the dictionary keys to do this stuff in case we change the naming convention
+        sigma=4
+        gauss=3
     if windex in ['31','41']: #although I should actually use the dictionary keys to do this stuff in case we change the naming convention
         sigma=3
-        gauss=3
+        #gauss=3
 
     if gauss:
         im = ndi.gaussian_filter(im, gauss)
@@ -349,38 +352,178 @@ def hough_peek(filen,edgef=False,mag=5.0,length=0.2):
     ax.set_axis_off()
     fig.show()     
 
-def rising_or_falling(rotim,rotarr,immean,plot=False,imfile=False,shape=False): #input is (slice of [:,100:110], for large mosaics) rotated image and rotated edge array, mean intensity of image
+
+def extend_line(line,shape=[640,480],plot=False):
+    """extend the line as far as it can go within the boundaries of the frame. TOP LEFT corner is origin!!"""
+    start=line[0]
+    end=line[1]
+    dxs,dys=shape[0]-start[0],shape[1]-start[1] #offsets from origin
+    slope = (np.float(end[1])-np.float(start[1]))/(np.float(end[0])-np.float(start[0])) #*-1 ?
+    #make a line with this slope, passing through start and end, that extends over the whole frame. Get endpoints...
+    #if dxs >= shape[0]/2 and dys <=shape[1]/2: #look closer to bottom right corner...assume all slopes are +-45 degrees
+    xvec=np.arange(0,shape[0],1)
+    #x2=np.arange(int(xvec),shape[0],1)
+    y2=slope*(xvec - np.float(start[0])) +np.float(start[1])   
+    #else:
+    #    x2=np.arange(0,int(np.float(start[0])+np.float(dxs)/np.sqrt(2.)+3),1)
+    #    y2=slope*(x2 - np.float(start[0])) +np.float(start[1])   
+
+    #now get endpoints for parts of the line that are within the frame - need to re-do limit on y!
+    if y2[0] < y2[-1]: 
+        xi=np.where(y2 >= 0.)[0][0]
+        try:
+            xf=np.where(y2 >=shape[1]-1)[0][0]
+        except IndexError:
+             xf = np.where(y2==y2[-1])[0][0]
+    else:
+        xf=np.where(y2 >= 0.)[0][-1]
+        try:
+            xi=np.where(y2 >=shape[1]-1)[0][-1]
+        except IndexError:
+             xi = np.where(y2==y2[0])[0][0]
+
+    extended_line=(int(xi),int(y2[xi])),(int(xf),int(y2[xf]))
+    #slopeE=float(int(y2[xf])-int(y2[xi]))/float(int(xf)-int(xi))
+    #print slope,slopeE
+    if plot:
+        s1=extended_line[0]
+        e1=extended_line[1]
+        fig,ax=plt.subplots()
+        ax.plot((start[0],end[0]),(start[1],end[1]))
+        ax.plot((s1[0],e1[0]),(s1[1],e1[1]),'r--')
+        fig.show()
+    
+    return extended_line#,xvec,y2
+    
+def same_line(lines,tol=3, plot=False):
+    """Test if two or more Hough line segments lie on the same line. Returns lists of line segments that fall on the same line, within a certain tolerance at the endpoints"""
+    extended_lines,matches,singles=[],[],[]
+    duplicate=False
+    for line in lines:
+        start=line[0]
+        end=line[1]
+        extended_lines.append(extend_line(line)) #extend the line as far as it can go within the boundaries of the frame
+        
+    #now test extended lines against each other
+    allxl=[(l[0][0],l[1][0]) for l in lines]
+    allyl=[(l[0][1],l[1][1]) for l in lines]
+    allx=[(exl[0][0],exl[1][0]) for exl in extended_lines]
+    #ally=[(exl[0][1],exl[1][1]) for exl in extended_lines]
+    for l,exl in zip(lines,extended_lines):
+        #pad the endpoints in x
+        ex1=exl[0]
+        ex2=exl[1]
+        if ex1[0]-tol/2 > 0:
+            padded_ex1=range(ex1[0]-tol/2,ex1[0]+tol/2,1)
+        else:
+            padded_ex1=range(ex1[0],ex1[0]+tol,1)
+        if ex2[0]+tol/2 > 0:
+            padded_ex2=range(ex2[0]-tol/2,ex2[0]+tol/2,1)
+        else:
+            padded_ex2=range(ex2[0],ex2[0]+tol,1)
+        #test if any other lines fall on the extended line, ie if any in allx are in padded_ex
+        #print padded_ex1,padded_ex2
+        for m in matches:
+            if l in m:
+                duplicate=True
+                #print l,m, duplicate
+            else:
+                duplicate = False
+                #print l,m, duplicate
+        if duplicate == False:    
+            matches.append([((xl[0],yl[0]),(xl[1],yl[1])) for x,xl,yl in zip(allx,allxl,allyl) if x[0] in padded_ex1 and x[1] in padded_ex2]) #now need to append the actual line segments associated with the extended lines
+    for m in matches:
+        if len(m) == 1: #find singles
+            singles.append(m)
+            matches.remove(m)
+    #print len(singles)
+
+    unique_matches=[]
+    for m in matches: #now matches doesn't contain any singles
+        if m not in unique_matches:
+            unique_matches.append(m)
+            for s in singles:
+                #print s,m
+                if s[0] in m:
+                    singles.remove(s)
+                    #print s,m
+    #print len(singles)
+    for s in singles:
+        unique_matches.append(s)
+            
+        #if so, ...group and return
+        
+    if plot:
+        fig,ax=plt.subplots()
+        scale=len(unique_matches)
+        for i,mm in enumerate(unique_matches):
+            for m in mm:
+                s1=m[0]
+                e1=m[1]
+                ax.plot((s1[0],e1[0]),(s1[1],e1[1]),color=cm.jet(float(i)/float(scale)))
+                #ax.plot((s1[0],e1[0]),(s1[1],e1[1]),'r--')
+            #print i/10.,cm.jet(i/10.)
+        fig.show()
+
+    return unique_matches
+    
+def rising_or_falling(rotim,rotarr,immean,plot=False,imfile=False,shape=False,rerotate=False, test=False):
     """Determine if an edge is rising (dark -> light) or falling (light -> dark). Return indexed mask"""
     imsize=np.shape(rotim)
     if not shape:
         mask=np.zeros([792,792])#np.zeros([640,480])
+        oshape=np.zeros([640,480])
     else:
         mask=np.zeros(shape)
-
+        oshape=np.zeros([640,480])
     meani=np.mean(rotim, axis=0) #average along y
     meanarr=np.sum(rotarr, axis=0) # total along y (remember it's boolean)
     #for rowi,rowarr in zip(meani,meanarr):
-    tv=np.where(meanarr > .2*np.mean(meanarr))
+    tv=np.where(meanarr > np.max(meanarr[0:50]))
     tvshape=np.shape(tv)[1]
     #get rising
-    rising=[tv[0][i] for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) > immean and tv[0][i+1] != tv[0][i]+1 ] 
+    rising=[tv[0][i] for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) > 1.25*immean and tv[0][i+1] != tv[0][i]+1 ] 
     
     mask[:,rising]= 1
     #get falling
-    falling=[tv[0][i] for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) < immean and tv[0][i+1] != tv[0][i]+1 ]
+    falling=[tv[0][i] for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) < .75*immean and tv[0][i+1] != tv[0][i]+1 ]
     mask[:,falling]= -1
     #print len(rising),len(falling)
+
+    if test:
+        print 'immean: ', immean
+        print 'threshold: ',np.max(meanarr[0:50])
+        print len(rising), len(falling)
+        print 'first few rising: ', rising[:10]
+        print 'means: ', [np.mean(meani[tv[0][i]:tv[0][i+1]]) for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) > 1.25*immean and tv[0][i+1] != tv[0][i]+1 ][:10]
+        print 'first few falling: ', falling[:10]
+        print 'means: ',[np.mean(meani[tv[0][i]:tv[0][i+1]]) for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) < .75*immean and tv[0][i+1] != tv[0][i]+1 ][:10]
+        
+    if len(rising)-len(falling) > 3.*np.max([len(rising),len(falling)]):
+         #print 'check mask!'
+         #plot=True
+         mask=[]
+        
     if plot:
         #import make_mask as mm
         #mm.mask_peek('win11_05_05_5.0X.tif',mask)
+        if test:
+            fig,ax=plt.subplots()
+            ax.plot(range(0,np.shape(meanarr)[0]),meanarr)
+            fig.show()
+
         fig,ax=plt.subplots()
         if not imfile:
-            ax.imshow(imrotate(np.transpose(im2ndarray('win11_05_05_5.0X.tif')),-44.79357),alpha=0.6,cmap=cm.gray)
+            ax.imshow(rotate(np.transpose(im2ndarray('win11_05_05_5.0X.tif')),-44.79357,reshape=True),alpha=0.6,cmap=cm.gray)
         else:
-            ax.imshow(imrotate(np.transpose(im2ndarray(imfile)),-44.79357),alpha=0.6,cmap=cm.gray)
+            ax.imshow(rotate(np.transpose(im2ndarray(imfile)),-45.03455+.93,reshape=True),alpha=0.6,cmap=cm.gray)
         ax.imshow(mask,cmap=cm.gray,alpha=0.7)
         fig.show()
 
+    if rerotate: #rotate it back by given angle and trim to original size
+        mask=imrotate(mask,rerotate)
+    #if len(rising) > 1.25* len(falling) or len(falling) > 1.25* len(rising):
+        #return []
     return mask
 
 def thin_to_binary(subarr,left):
@@ -399,7 +542,7 @@ def thin_to_binary(subarr,left):
 
     return thinnedarr
 
-def group_edges_by_idx(rotarr,mask,nomp,mod=3,plot=True,tolerance=.6,from_line = True):
+def group_edges_by_idx(rotarr,mask,nomp,mod=3,plot=False,tolerance=.6,from_line = False):
     '''Group edges based on mask index'''
     rising=list(np.where(mask[0,:] == 1.0)[0])
     falling=list(np.where(mask[0,:] == -1.0)[0])
@@ -498,27 +641,53 @@ def group_edges_by_mosaic_idx(rotarr,mask,nomp,mod=3,plot=True,tolerance=.6,from
     
     return periodr,periodf
 
-def get_period_by_grouping(window_num,mag=5.0,plot=True,side=1.0,pix2um=1.955,stats=True,EM=True,tolerance=0.6,mosaic=True):
+def test_mask(ef, im, nang):
+    edges=pickle.load(open(ef,'rb'))
+    ima=im2ndarray(im)
+    ima=remove_edges(im,ima)
+    rotim=rotate(np.transpose(ima),nang, reshape=True)
+    rotarr=rotate(np.transpose(edges),nang,reshape=True)
+    #print im,ef
+    mask=rising_or_falling(rotim[300:450,:],rotarr[300:450,:],np.mean(rotim[300:450,100:-100]), shape=np.shape(rotarr),imfile=im,plot=True,test=True)
+    print np.mean(rotim[300:450,:])
+
+def mean_hough_angle(f_all,side=1.0,save=True):
+    lines=pickle.load(open(f_all,'rb'))
+    angles=[]
+    for l in lines:
+        angles.append(side*get_angle(l))
+    meana=np.mean(angles)
+    if save:
+        pickle.dump(meana,open(f_all[:-2]+'_mean.p','wb'))
+    return meana
+
+
+def get_period_by_grouping(window_num,mag=5.0,plot=True,side=1.0,pix2um=1.955,stats=True,EM=True,tolerance=0.6,mosaic=True,offset=False, fitangle=True):
     '''Put everything together for a single window'''
     #first get the files
     if EM:
         edgef=EM_list(str(window_num),str(mag),ending='_edges.p')
     else:    
-        edgef=glob.glob('win'+str(window_num)+'_*' + str(mag)+'X_edges.p')
+        edgef=glob.glob('win'+str(window_num)+'_*' + str(mag)+'X*_edges.p')
     if EM:
         imf=EM_list(str(window_num),str(mag),ending='.tif')
     else:
-        imf=glob.glob('win'+str(window_num)+'_*' + str(mag)+'X.tif')
+        imf=glob.glob('win'+str(window_num)+'_*' + str(mag)+'X*.tif')
     if mosaic:
         edgef=['win11_mosaic_5.0_edges.p']
         imf=['window11mosaic_5.0.tiff']
     
     rperiods,fperiods=[],[]
+    badmasks=0
     if side == 1.0:
         nang=[aa['nominal angle'] for aa in windows if aa['number']==window_num][0]
+        if offset:
+            nang=nang+offset
         nperiod=[aa['pitch'] for aa in windows if aa['number']==window_num][0]
     else:
         nang=[aa['nominal angle'] for aa in windowsr if aa['number']==window_num][0]
+        if offset:
+            nang=nang+offset
         nperiod=[aa['pitch'] for aa in windowsr if aa['number']==window_num][0]
     for im,ef in zip(imf,edgef):
         #print im,ef
@@ -531,15 +700,28 @@ def get_period_by_grouping(window_num,mag=5.0,plot=True,side=1.0,pix2um=1.955,st
         #ima = exposure.rescale_intensity(ima, in_range=(p2, p98))
         #immean=np.mean(ima)
         #now make mask
+        if fitangle:
+            try:
+                testang=pickle.load(open(ef[:-8]+'_hough_all_mean.p','rb'))
+            except IOError:
+                testang=mean_hough_angle(ef[:-8]+'_hough_all.p',side=side)
+            if not np.isnan(testang):
+                nang=testang #otherwise keep as nominal angle
         rotim=rotate(np.transpose(ima),side*nang, reshape=True)
         rotarr=rotate(np.transpose(edges),side*nang,reshape=True)
         #print im,ef
-        mask=rising_or_falling(rotim[4110:4120,:],rotarr[4110:4120,:],np.mean(rotim[4110:4120,:]), shape=np.shape(rotarr))
+        mask=rising_or_falling(rotim[300:450,:],rotarr[300:450,:],np.mean(rotim[300:450,100:-100]), shape=np.shape(rotarr),imfile=im)
         #group
-        periodr,periodf=group_edges_by_idx(rotarr,mask,nperiod/pix2um,tolerance=tolerance,mod=3)
-        rperiods.extend(periodr)
-        fperiods.extend(periodf)
+        if np.shape(mask)[0] > 0:
+            periodr,periodf=group_edges_by_idx(rotarr,mask,nperiod/pix2um,tolerance=tolerance,mod=3)
+            rperiods.extend(periodr)
+            fperiods.extend(periodf)
+        else:
+            badmasks+=1
+            print im
 
+    print 'bad masks ', badmasks
+            
     periods=rperiods
     periods.extend(fperiods)
 
@@ -561,6 +743,7 @@ def get_period_by_grouping(window_num,mag=5.0,plot=True,side=1.0,pix2um=1.955,st
         ax[0].set_xlabel('Period $\mu$m')
         ax[0].set_ylabel('Counts')
         ax[0].set_yscale('log')
+        ax[0].set_ylim([1,10000])
         figfilename='win'+str(window_num)+'_group_periods'+str(mag)+'.png'
         fig.savefig(figfilename)
         fig.show()
@@ -805,8 +988,9 @@ def get_theta_range(edges,side=1.0,spread=5.,n=201):
     thetaran = np.linspace(theta0-spreaddeg2rad, theta0+spreaddeg2rad, num=n)#in radians
     return thetaran
 
-def prob_hough(edges, threshold=10, line_length=50, line_gap=2,retlines=False,plot=False,side=1.0,spread=5.,n=201):
+def prob_hough(edges, threshold=10, line_length=50, line_gap=2,retlines=False,plot=False,side=1.0,spread=5.,n=201, tag=False,overwrite=False):
     '''Perform probabilistic Hough fit to given set of edges'''
+    import glob
     if type(edges) == str: #it's a filename
         inp=edges
         edata=pickle.load(open(edges,'rb'))
@@ -814,6 +998,14 @@ def prob_hough(edges, threshold=10, line_length=50, line_gap=2,retlines=False,pl
         edata=edges
         edges=raw_input('What is the window number?')
         inp=raw_input('Output file name?')
+    if not overwrite:
+        if tag:
+            defaultn=inp[:-8]+'_hough_'+tag+'.p'
+        else:
+            defaultn=inp[:-8]+'_hough.p'
+        names=glob.glob(defaultn)
+        if names !=[]:
+            return
 
     thetaran=get_theta_range(edges,spread=spread,n=n,side=side)
     start=time.time()
@@ -834,6 +1026,8 @@ def prob_hough(edges, threshold=10, line_length=50, line_gap=2,retlines=False,pl
     try:
         if inp:
             newfilen=inp[:-8]+'_hough.p'
+            if tag:
+                newfilen=inp[:-8]+'_hough_'+tag+'.p'
             pickle.dump(lines,open(newfilen,'wb'))
             return newfilen
     except ValueError:
@@ -978,24 +1172,60 @@ def dialate_and_erode(edges):
     return imblurred,imeroded,imdilated
     #cv2.imwrite('testim_blured.png',cv2.dilate(cv2.erode(imblurred, np.ones(erode_)), np.ones(dilate_))*255)
 
-def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=False,stats=True,figname=False,side=1.0,spread=5.,n=201,gaussfit=True): #cuz of mpi
+def cat_hough(window_num, tags=['ll150','ll200','ll250','ll300'],weights=False,outtag='all',EM=True,mag=5.0):
+    """Cat together the lines """
+    #first get indices for the window
+    if not EM:
+        ofiles=glob.glob('win'+str(window_num)+'_*'+str(mag)+'X*_edges.p')
+    else:
+        ofiles=EM_list(str(window_num),str(mag),ending='_edges.p')
+    idxs=[get_index(o)[1] for o in ofiles]
+    #all_lines=[]
+    for idx in idxs:
+        basen='win'+str(window_num)+'_'+str(idx[0])+'_'+str(idx[1])+'_'+str(mag)+'X_hough'
+        lines=pickle.load(open(basen+'.p','rb'))
+        #print len(lines)
+        all_lines=lines
+        #print len(all_lines)
+        for i,tag in enumerate(tags):
+            lines=pickle.load(open(basen+'_'+tag+'.p','rb'))
+            #print len(lines)
+            if not weights:
+                all_lines.extend(lines)
+            else:
+                for j in range(0,weights[i]):
+                    all_lines.extend(lines)
+            #print len(all_lines)
+        pickle.dump(all_lines,open(basen+'_'+outtag+'.p','wb'))
+
+def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=False,stats=True,figname=False,side=1.0,spread=5.,n=201,gaussfit=False, sameline=True,tol=3): #cuz of mpi
     '''Make a histogram of the line orientations returned by probabilistic Hough'''
     theta=[]
     llist=[]
     if type(lines) == list: #it's a list of filenames
         for f in lines:
             llist.append(pickle.load(open(f,'rb')))
+            #print f,np.shape(pickle.load(open(f,'rb')))  
         #print np.shape(llist)
-        for i,l in enumerate(llist):
-            if i == 0:
-                all_lines=l
-            if i < len(llist)-1:
+    for i,l in enumerate(llist):
+        if i == 0:
+            all_lines=l
+        if i < len(llist)-1:
+            if sameline:
+                grouped_lines=same_line(l,tol=tol)
+                for gl in grouped_lines:
+                    theta.append(np.mean([get_angle(g) for g in gl]))
+            else:
                 all_lines=all_lines + llist[i+1]
-        lines=all_lines
-    for l in lines:
-        #if get_length(l) >= 50.: 
-        #if get_angle(l) != 45.0 and get_angle(l) != -45.0: #suppress the 45.0 value as a test...
-        theta.append(get_angle(l))
+                lines=all_lines
+    if theta == []:
+        for l in lines:
+            #if get_length(l) >= 50.: 
+            #if get_angle(l) != 45.0 and get_angle(l) != -45.0: #suppress the 45.0 value as a test...
+            try:
+                theta.append(get_angle(l))
+            except TypeError:
+                continue
 
     print len(theta), np.min(theta),np.max(theta)
 
@@ -1024,7 +1254,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
         statfile='win'+str(windownum)+'_angle_stats_'+str(mag)+'.p'
         datafile='win'+str(windownum)+'_angle_data'+str(mag)+'.p'
         print "-------------------STATISTICS FOR WINDOW "+str(windownum)+"---------------------"
-        print '     Nominal Angle: ' + str(ang[0])[:-3]
+        print '     Nominal Angle: ' + str(ang[0])
         print '              Mean: ' + str(avg)
         print '            Median: ' + str(med)
         print 'Standard Deviation: ' + str(stdv)
@@ -1138,8 +1368,8 @@ def get_angle(line):
     '''Get angle of line via tangent. Note that because the top left corner is 0,0 in the background image we multiply x's by -1'''
     deltax=-1*(line[1][0]-line[0][0])
     deltay=line[1][1]-line[0][1]
-    theta=np.arctan2(float(deltay),float(deltax))  #np.arctan2(float(deltay)/float(deltax))
-    thetadeg=theta*180./np.pi
+    theta=np.arctan(float(deltay)/float(deltax))  #np.arctan2(float(deltay)/float(deltax))
+    thetadeg=np.rad2deg(theta) #theta*180./np.pi
     return thetadeg
 
 ##plot outilers

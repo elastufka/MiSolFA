@@ -86,6 +86,7 @@ class Simulator_GUI(Frame):
 
     def picker(self):
         '''Run the widget from imager_widget.py'''
+        self.classinst = imager.Imager()
         toplevel=Toplevel()
         choice = {'Substrate':{'Material':['C','Si','W','Polymer'],'Thickness':['200','300','400','500','1000']},'Slits':{'Material':['Au','Au80Sn20','W'],'Thickness':['100','150','200','250','300']},'Attenuator':{'Material':['Be','Al','None'],'Thickness':['50','100','300','500','1000']},'Detector':{'Material':['CdTe','Al','None'],'Thickness':['1000','2000','3000']},'Filled':{'choices':['Y','N']}}
         self.vars=[] 

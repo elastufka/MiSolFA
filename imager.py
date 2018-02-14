@@ -27,8 +27,8 @@ class Imager(object):
                 widget=None
             except IOError:
                 attenuator =['Al','100']
-                slits=['Au','200']
-                substrate=['Si','500']
+                slits=['Au','50']
+                substrate=['Si','250']
                 filled='Si'
                 detector=['CdTe','1000']            
 
@@ -107,23 +107,27 @@ class Imager(object):
             array[2] = 1
             
         energy = [[] for i in range(len(filenames))]
+        a = [[] for i in range(len(filenames))]
         transmission=[[] for i in range(len(filenames))]
         tinterp = [[] for i in range(len(filenames))]
+        rho=[]
         os.chdir('/Users/wheatley/Documents/Solar/MiSolFA/calculations/data')
         for filename,thickness,index in zip(filenames,thicknesses,range(0,len(filenames))):
             data=pd.read_csv(filename,sep=',', header=0)
             energy[index] = data['E (keV)']
+            a[index] = data['a (cm^2/g)']
+            rho.append(data['rho (g/cm^3)'][0])
+            
             try:
                 transmission[index] = data['P(xi) (d='+thickness+' um)']
                 #print transmission[index][0:10]
             except KeyError:
-                print 'the key '+ 'P(xi) (d='+thickness+' um)'+ ' does not exist'
+                transmission[index]=self.calc_transmission(a[index],rho[index],thickness)
                 #start over?
 
         os.chdir('/Users/wheatley/Documents/Solar/MiSolFA/code/MiSolFA')
 
         #interpolate everything to the same energy range
-
         evector = np.linspace(2.08, 433, num=500, endpoint=True) #check that this spans the correct range
         #print evector[0:10]
         for i in range(0,len(filenames)):
@@ -152,6 +156,12 @@ class Imager(object):
             self.substrate['eff_area']=self.substrate['eff_area']*(1-self.detector['Transmission'])**2
             self.slits['eff_area']=self.slits['eff_area']*(1-self.detector['Transmission'])**2
         self.eff_area = self.substrate['eff_area']- self.slits['eff_area']
+
+    def calc_transmission(self,a, rho, thickness):
+        '''Make this seperate just in case'''
+        thick=float(thickness)*10**-4
+        transmission = [np.exp(-1*x*thick*rho) for x in a]
+        return transmission
                  
     def plot_eff_area(self): #should I make a plotting widget? possibly....
         '''Plot the effective area of the selected configuration.'''

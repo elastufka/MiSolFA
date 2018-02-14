@@ -32,10 +32,10 @@ def all_possible_moire(windict,windownum,dec=3,n=50,percent=10):
     #RgaussP=np.random.normal(RmeanP,RdevP,n)
     #RgaussA=np.random.normal(RmeanA,RdevA,n)
 
-    FgaussP=np.random.normal(59.855,.2,n)
-    FgaussA=np.random.normal(44.86*np.pi/180.,.005*np.pi/180.,n)
-    RgaussP=np.random.normal(60.145,.2,n)
-    RgaussA=np.random.normal(45.14*np.pi/180.,.005*np.pi/180.,n)
+    FgaussP=np.random.normal(59.855,.06,n)
+    FgaussA=np.random.normal(44.86*np.pi/180.,.02*np.pi/180.,n)
+    RgaussP=np.random.normal(60.145,.06,n)
+    RgaussA=np.random.normal(45.14*np.pi/180.,.02*np.pi/180.,n)
     
     
     Fx_vec,Fy_vec=calc_Svec(FgaussP,FgaussA)
