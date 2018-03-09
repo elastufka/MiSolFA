@@ -161,17 +161,29 @@ def plot_eff_period_seg(seg,phase=[0.,0.,0.,0.],size=1.2,duty=0.5, d1=50.,d2=55.
 def plot_moire_fancy(moire_period,moire_orientation,titles=False,size=1.2,reflect=True):
     nplots = len(moire_period)
     mim,xoff,yoff=[],[],[]
+    nsimple=[[0]]
+    m,bext,b=[],[],[]
     for p,o in zip(moire_period,moire_orientation):
         #determine how big the array needs to be to fit when rotated and cropped
         asize = 100.*size*(np.abs(np.cos(np.deg2rad(o)))+np.abs(np.tan(np.deg2rad(o)))) #mm/10
-        print asize
+        #print asize
         #off.append(100.*size*np.abs(np.cos(np.deg2rad(o)))#0)#int(size*100*abs(np.tan(np.deg2rad(o)))))#offset
         #draw x-axis vector such that you have 2pi every period
         npts=int(p*10.)
         npds=asize/(p*10.)
-        if npds > 70:
-            nplots=nplots-1
-            print('Asking to plot ' + str(int(npds)) + ' periods! This will not end well...skipping')
+        if npds > 25:
+            nsimple.append([1])
+            #nplots=nplots-1
+            #print('Asking to plot ' + str(int(npds)) + ' periods! This will not end well...skipping')
+            mm,bb=plot_moire_simple(p,o,reflect=reflect)
+            m.append(mm)
+            b.append(bb[:])
+            if o < 90:
+                ex=[bb[-1]+cc for cc in bb[1:]]
+            else:
+                ex=[bb[1]-cc for cc in bb[1:]]                
+            bb.extend(ex)
+            bext.append(bb) #extend for better plotting
             continue
         print npts, npds
         xp = list(np.linspace(0,2*np.pi,npts))
@@ -200,7 +212,9 @@ def plot_moire_fancy(moire_period,moire_orientation,titles=False,size=1.2,reflec
         xdiff = np.abs(100.*size*np.cos(np.deg2rad(ang))*np.cos(np.deg2rad(ang)))
         yoff.append(asize*np.abs(np.sin(np.deg2rad(ang))) - ydiff)
         xoff.append(asize*np.abs(np.cos(np.deg2rad(ang))) - xdiff)
+        nsimple.append([0])
         #print xoff, yoff
+    sumsimple=[i for i,j in enumerate(nsimple) if j[0] !=0]
     
     if nplots % 2 or nplots == 2:
         fig,ax= plt.subplots(nplots)
@@ -209,31 +223,62 @@ def plot_moire_fancy(moire_period,moire_orientation,titles=False,size=1.2,reflec
             ax.set_xlim([xoff[0],int(size*100.)+xoff[0]])
             ax.set_ylim([yoff[0],int(size*100.)+yoff[0]])
         else:
+            jm=0
             for i,a in enumerate(ax):
-                a.imshow(mim[i],cmap='gray')
-                a.set_xlim([xoff[i],size*100.+xoff[i]])
-                a.set_ylim([yoff[i],size*100.+yoff[i]])
+                if i+1 not in sumsimple:
+                    a.imshow(mim[jm],cmap='gray')
+                    a.set_xlim([xoff[jm],size*100.+xoff[jm]])
+                    a.set_ylim([yoff[jm],size*100.+yoff[jm]])
+                    jm+=1
+                else:
+                    idx=sumsimple.index(i+1)#int(abs(sumsimple[0]-(i+1)))
+                    for k,j in enumerate(bext[idx]):
+                        if k%2 ==0: col = 'k'
+                        else: col = 'w'
+                        a.plot(bext[idx],m[idx]*np.array(bext[idx])+j,color=col)
+                    a.set_xlim([b[idx][0],b[idx][-1]])
+                    a.set_ylim([b[idx][0],b[idx][-1]])
                 a.set_aspect('equal')
     else:
-        fig,ax= plt.subplots(nplots/2,2,figsize=[8,8])
-        for i,r in enumerate(itertools.product(range(0,nplots/2),range(0,2))):
-            ax[r[1]][r[0]].imshow(mim[i],cmap='gray')
-            ax[r[1]][r[0]].set_ylim([yoff[i],int(size*100.)+yoff[i]])
-            ax[r[1]][r[0]].set_xlim([xoff[i],int(size*100.)+xoff[i]])
+        fig,ax= plt.subplots(2,nplots/2,figsize=[2*nplots,8])
+        jm=0
+        for i,r in enumerate(itertools.product(range(0,nplots/2),(range(0,2)))):
+            if i+1 not in sumsimple:            
+                ax[r[1]][r[0]].imshow(mim[jm],cmap='gray')
+                ax[r[1]][r[0]].set_ylim([yoff[jm],int(size*100.)+yoff[jm]])
+                ax[r[1]][r[0]].set_xlim([xoff[jm],int(size*100.)+xoff[jm]])
+                jm+=1
+            else:
+                idx=sumsimple.index(i+1)
+                for k,j in enumerate(bext[idx]):
+                    #print len(bext[i-sumsimple]),len(bext[i-sumsimple]+j)
+                    #print m[i-sumsimple]
+                    if k%2 ==0: col = 'k'
+                    else: col = 'w'
+                    ax[r[1]][r[0]].plot(bext[idx],m[idx]*np.array(bext[idx])+j,color=col)
+                ax[r[1]][r[0]].set_xlim([b[idx][0],b[idx][-1]])
+                ax[r[1]][r[0]].set_ylim([b[idx][0],b[idx][-1]])
             ax[r[1]][r[0]].set_aspect('equal')
             if titles:
                 ax[r[1]][r[0]].set_title(titles[i],fontsize='small')
-            #fig.canvas.draw()
-            #xt=ax[r[1]][r[0]].get_xticks().tolist()
-            #yt=ax[r[1]][r[0]].get_yticks().tolist()
-            #print xt[0],yt[0]
-            #nxt=[xtt - xt[0] for xtt in xt]
-            #nyt=[ytt - yt[0] for ytt in yt]
-            #print 'xrange: ',yoff[i],int(size*100.)+yoff[i],int(size*100.)+yoff[i]-yoff[i]
-            #print 'yrange: ',xoff[i],int(size*100.)+xoff[i],int(size*100.)+xoff[i]-xoff[i]
             ax[r[1]][r[0]].axis('off')
     plt.tight_layout()
     fig.show()
+
+def plot_moire_simple(moire_period,moire_orientation,size=1.2,reflect=True):
+    '''just draw lines because there's too many periods. Only return plottables, plot them together with other windows in plot_moire_fancy'''
+    mim,xoff,yoff=[],[],[]
+    nlines=int(moire_period/2.)+1
+    b=np.linspace(0,nlines)
+    #npix = 
+    xp = list(np.linspace(0,nlines))
+    if reflect:
+        slope= np.tan(np.deg2rad(-1*moire_orientation))#calculate the slope
+    else:
+        slope= np.tan(np.deg2rad(moire_orientation))#calculate the slope
+
+    return slope,list(b) #x,slope and offsets
+
 
 def calc_moire_period(fp,rp,fa,ra,eff=False,quiet=True):
     if eff:#first adjust the effective period back to the actual period
@@ -259,7 +304,8 @@ def calc_moire_period_mpi(inp):
     d1,d2,d_det=inp[4],inp[5],inp[6]
     fpo,fao,rpo,rao=inp[0],inp[1],inp[2],inp[3]
     twist=inp[7]
-    s1=1.+1.3/d1 #d2-d1 replaced by 1.3 (7mm red part, 3mm each lower cover) since this is fixed
+    s1=1.+(d2/d1) #d2-d1 replaced by 1.3 (7mm red part, 3mm each lower cover) since this is fixed
+    #d2-d1 is replaced by d2 where d2 is acting as delta d, ranging from parameters given
     s2=1.
     fp=fpo*s1
     fa=fao+twist
@@ -366,4 +412,19 @@ def test_visibility(seg,size=1.2):
 
     fig.show()
     return xvec
+
+def tex2params(infile,test=1):
+    '''read the latex output file and get the periods and orientations for the different tests so that they can be easily plotted'''
+    periods,orientations=[],[]
+    with open(infile,'r') as f:
+        lines=f.readlines()
+    for line in lines:
+        pp=line[:-3].split('&')
+        idx=(test*2)-1
+        periods.append(float(pp[idx]))
+        ang=float(pp[idx+1])
+        if ang<1.0:
+            ang=90.+abs(float(pp[idx+1]))
+        orientations.append(ang)
+    return periods,orientations
 

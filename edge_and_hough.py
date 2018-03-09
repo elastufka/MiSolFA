@@ -132,10 +132,10 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
             'StepY' : 0.9246}
     else: #15X
         mscope={'Magnification': 15.0, 
-            'FOVx': 0.4163,
-            'FOVy' : 0.3127,
-            'ExcessX_px' : -7.0,
-            'ExcessY_px' : 6.0,
+            'FOVx': 0.4165,
+            'FOVy' : 0.3128,
+            'ExcessX_px' : 253.,
+            'ExcessY_px' : 255.0,
             'ExcessX' : -0.0046,
             'ExcessY' : 0.0039,
             'StepX' : 0.4163,
@@ -152,13 +152,14 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
     for win in window_num:
         #store filenames
         fnames = [im for im in coords.keys() if int(coords[im]['number'])== win]
+        fnames.sort()
         #fnames = [im for im in fnames if coords[im]['indices'][0]== '01'] #for testing on first column
         
         #get the coordinates of each image
         cwinx = [coords[im]['im_coords'][0] for im in fnames] #image x coordinates in mm
         cwiny = [coords[im]['im_coords'][1] for im in fnames] #image y coordinates in mm
-        idxx  = [coords[im]['indices'][1] for im in fnames]
-        idxy  = [coords[im]['indices'][0] for im in fnames]
+        idxx  = [coords[im]['indices'][0] for im in fnames]
+        idxy  = [coords[im]['indices'][1] for im in fnames]
         #convert mm to pixels
         cpixx=np.array(cwinx)*(640.0/pixX) 
         cpixy=np.array(cwiny)*(480.0/pixY)
@@ -166,23 +167,34 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
         #translate coords so that top left coord is at [0,0]
         cminx=np.min(cpixx)
         cmaxy=np.max(cpixy)
-        #print cminx,cmaxy
-        cpixx=cpixx-cminx#np.rint(cpixx-cminx)
-        cpixy=cmaxy-cpixy#np.rint(cmaxy-cpixy)
+        print cminx,cmaxy
+        cpixx=np.rint(cpixx-cminx)#cpixx-cminx
+        cpixy=np.rint(cmaxy-cpixy)#cmaxy-cpixy
         #print int(np.max(cpixx))+640,int(np.max(cpixy))+480
 
         #make new blank image
-        background=Image.new("L",[int(np.max(cpixx))+714,int(np.max(cpixy))+554], 0xff) #[0,0] is TOP left #extra 9x12 px for rounding errors
+        background=Image.new("L",[int(np.max(cpixx)),int(np.max(cpixy))], 0xff) #[0,0] is TOP left #extra 9x12 px for rounding errors
         #background=Image.new("1",[int(np.max(cpixy))+480,int(np.max(cpixx))+640], "white") #[0,0] is TOP left
-        print 'size:', int(np.max(cpixx))+649,int(np.max(cpixy))+492, 
+        #print 'size:', int(np.max(cpixx))+649,int(np.max(cpixy))+492, 
         #put things in their place
         #fnames=[fnames[2],fnames[6]]
-        mx,my=[],[]
+        mx,my,fpixx,fpixy=[],[],[],[]
+        #determine the actual excess pixels
+        exx=640.-np.mean([c2-c1 for c1,c2 in zip(cpixx[:-13],cpixx[13:])])
+        exy=480.-np.mean([c2-c1 for c1,c2 in zip(cpixy[:-1],cpixy[1:]) if c2-c1 > 0])
+        print 'excess ', exx,exy
         for i,f in enumerate(fnames):#zip([2,6],fnames):#enumerate(fnames):
             im=Image.open(f)
-            offsetx=int(idxx[i])*6
-            offsety=int(idxy[i])*9
-            box=(int(cpixx[i])+offsetx,int(cpixy[i])-offsety)#,640+int(cpixx[i]),480+int(cpixy[i]))
+            offsetx=0#(int(idxx[i])-1)*int(exx)#0##int(idxx[i])*6
+            offsety=0#(int(idxy[i])-1)*int(exy)
+            fpixx.append(int(cpixx[i])-offsetx)
+            fpixy.append(int(cpixy[i])-offsety)
+            # "The box argument is either a 2-tuple giving the upper left corner,
+            # a 4-tuple defining the left, upper, right, and lower pixel coordinate, or None (same as (0, 0))."
+            #assuming the actual coordinates are the center of the image...
+            #offsetx = 640/2
+            #offsety= 480/2
+            box=(int(cpixx[i])-offsetx,int(cpixy[i])-offsety)#,640+int(cpixx[i]),480+int(cpixy[i]))
             mx.append(box[0])
             my.append(box[1])
             background.paste(im,box)
@@ -205,7 +217,7 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
         pickle.dump(mcoords, open(filename+'_coords.p','wb'))
         
     #return new list of filenames
-    return fnames,cpixx,cpixy#filename+'.p'
+    return fnames,cpixx,cpixy,idxx,idxy,fpixx,fpixy#filename+'.p'
     #return mfiles
     #return fnames,cpixx,cpixy
 
@@ -516,7 +528,7 @@ def rising_or_falling(rotim,rotarr,immean,plot=False,imfile=False,shape=False,re
         if not imfile:
             ax.imshow(rotate(np.transpose(im2ndarray('win11_05_05_5.0X.tif')),-44.79357,reshape=True),alpha=0.6,cmap=cm.gray)
         else:
-            ax.imshow(rotate(np.transpose(im2ndarray(imfile)),-45.03455+.93,reshape=True),alpha=0.6,cmap=cm.gray)
+            ax.imshow(rotate(np.transpose(im2ndarray(imfile)),45.03455,reshape=True),alpha=0.6,cmap=cm.gray)
         ax.imshow(mask,cmap=cm.gray,alpha=0.7)
         fig.show()
 
@@ -648,8 +660,8 @@ def test_mask(ef, im, nang):
     rotim=rotate(np.transpose(ima),nang, reshape=True)
     rotarr=rotate(np.transpose(edges),nang,reshape=True)
     #print im,ef
-    mask=rising_or_falling(rotim[300:450,:],rotarr[300:450,:],np.mean(rotim[300:450,100:-100]), shape=np.shape(rotarr),imfile=im,plot=True,test=True)
-    print np.mean(rotim[300:450,:])
+    mask=rising_or_falling(rotim[300:950,:],rotarr[300:950,:],np.mean(rotim[300:950,100:-100]), shape=np.shape(rotarr),imfile=im,plot=True,test=True)
+    print np.mean(rotim[300:950,:])
 
 def mean_hough_angle(f_all,side=1.0,save=True):
     lines=pickle.load(open(f_all,'rb'))
@@ -693,7 +705,7 @@ def get_period_by_grouping(window_num,mag=5.0,plot=True,side=1.0,pix2um=1.955,st
         #print im,ef
         edges=pickle.load(open(ef,'rb'))
         ima=im2ndarray(im)
-        ima=remove_edges(im,ima)
+        #ima=remove_edges(im,ima)
         #contrast stretching
         #p2 = np.percentile(ima, 2)
         #p98 = np.percentile(ima, 98)
@@ -707,13 +719,14 @@ def get_period_by_grouping(window_num,mag=5.0,plot=True,side=1.0,pix2um=1.955,st
                 testang=mean_hough_angle(ef[:-8]+'_hough_all.p',side=side)
             if not np.isnan(testang):
                 nang=testang #otherwise keep as nominal angle
+        print nang
         rotim=rotate(np.transpose(ima),side*nang, reshape=True)
         rotarr=rotate(np.transpose(edges),side*nang,reshape=True)
         #print im,ef
-        mask=rising_or_falling(rotim[300:450,:],rotarr[300:450,:],np.mean(rotim[300:450,100:-100]), shape=np.shape(rotarr),imfile=im)
+        mask=rising_or_falling(rotim[300:450,:],rotarr[300:450,:],np.mean(rotim[300:450,100:-100]), shape=np.shape(rotarr),imfile=im,plot=plot)
         #group
         if np.shape(mask)[0] > 0:
-            periodr,periodf=group_edges_by_idx(rotarr,mask,nperiod/pix2um,tolerance=tolerance,mod=3)
+            periodr,periodf=group_edges_by_idx(rotarr,mask,nperiod/pix2um,tolerance=tolerance,mod=3,plot=plot)
             rperiods.extend(periodr)
             fperiods.extend(periodf)
         else:
@@ -874,7 +887,7 @@ def get_slit_width(edges,mag=5.0,im=False,window_num=False, title='',xran=[0,45]
         pix2um=.6505
         print 'pix2um',pix2um
         #if im !=False: #it's a numpy array of an image that we will use to determine if slit or slat. Let's make sure these are the same shape
-    if im:
+    if im.any():
         imarr=im
         if np.shape(imarr) !=np.shape(edges):
             trim=raw_input("Dimensions don't match! which side or list of sides to trim? [top,bottom,left,right,all]")
@@ -1210,6 +1223,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
     for i,l in enumerate(llist):
         if i == 0:
             all_lines=l
+            lines=all_lines
         if i < len(llist)-1:
             if sameline:
                 grouped_lines=same_line(l,tol=tol)
