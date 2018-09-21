@@ -83,7 +83,8 @@ def interpolate_transmission(slit_input, substrate_input, attenuator=False, fill
     #are the slits filled with polymer? If so, calculate the transmission through the material. This material covers 50% of the area of the front part of grid (layer on top of the substrate). Think of this layer as two separate layers, each receiving 50% of the incoming light. Then, the transmission through the total layer is: .5*T_1 * .5*T_2. So the effective area will actually increase fractionally if the slits are filled with a material. Does that make sense though? I would expect a small decrease. Think about this on Monady.
     if filled:
         filling_dict = read_data('/Users/wheatley/Documents/Solar/MiSolFA/calculations/data/Polymer.csv')
-        filling = np.interp(evector,filling_dict['E (keV)'],filling_dict['P(xi) (d='+slit_thickness +' um)'])
+        #filling = np.interp(evector,filling_dict['E (keV)'],filling_dict['P(xi) (d='+slit_thickness +' um)'])
+        filling = np.interp(evector,filling_dict['E (keV)'],filling_dict['P(xi) (d=300 um)'])
         filling = filling*0.5 #because it has half the effective area
     else:
         filling = 1.0
@@ -207,7 +208,7 @@ def plot_flare_counts(plotdata):
     plt.ylabel('Counts $s^{-1} keV^{-1}$')
     ax1.set_ylim([1,10000])
     ax1.set_xlim([0,150])
-    plt.title("Expected flare counts for grids "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + '$\mu$m, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'$\mu$m'# with ' + atype[0] + ' '+ atype[1]+'$\mu$m attenuator')
+    plt.title("Expected flare counts for grids "+ substrate_properties['material'] + ' '+ substrate_properties['thickness'] + '$\mu$m, ' + slit_properties['material'] + ' '+ slit_properties['thickness']+'$\mu$m')# with ' + atype[0] + ' '+ atype[1]+'$\mu$m attenuator')
 
     #plt.title("Effective area of grids")
     ax1.legend(loc='upper right',fontsize='medium')
@@ -217,7 +218,7 @@ def plot_flare_counts(plotdata):
 
     plotdata=[energy,eff_area,sub,slit,substrate_properties,slit_properties,ntnt,thth,fac,thermal_counts,nonthermal_counts]
     #save current plot data in pickle file
-    pickle.dump(plotdata, open('plotdata.p','wb'))
+    pickle.dump(plotdata, open('EMplotdata.p','wb'))
 
     return fig
 

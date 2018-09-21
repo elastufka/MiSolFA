@@ -1,11 +1,10 @@
 """
 ===================
-edge_and_hough.py
-Erica  Lastufka 20.9.17
+analyze_general.py
+Erica  Lastufka 5.9.18
 ===================
 
-Module to do Canny edge detection at desired sigma level, then continue with probabilistic Hough. Methods to write/store results. Use __main__ to run the whole thing eg from a mpi interface? first maybe do some timing tests..
-
+General methods for class Analyze. To be inherited by analyze_optical and analyze_xray, etc.
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,80 +16,15 @@ from skimage.transform import  (hough_line, hough_line_peaks,
                                probabilistic_hough_line)
 import itk
 import pickle
+import scipy
 from scipy.misc import imrotate
 from scipy.ndimage.interpolation import rotate
 from scipy.optimize import curve_fit
 import time
 import glob
+import os
 
-#list of dictionaries of the window numbers, pitches (mm), and nominal angles (deg)
-global windows
-global windowsr
-
-windows=[{'number':11,'pitch':89.6752,  'nominal angle':-44.79357},
-                {'number':21,'pitch':90.326,  'nominal angle': 45.20793},
-                {'number':12,'pitch':22.4797,'nominal angle': 44.94825},
-                {'number':22,'pitch':22.5203,'nominal angle':-45.05184},
-                {'number':31,'pitch':45.0814, 'nominal angle':-45.10378},
-                {'number':41,'pitch':44.9187, 'nominal angle': 44.8966},
-                {'number':32,'pitch':18.013, 'nominal angle': 45.04146},
-                {'number':42,'pitch':17.987, 'nominal angle':-44.95859},
-                {'number':33,'pitch':29.9639,  'nominal angle':-44.93102},
-                {'number':43,'pitch':30.0362,  'nominal angle': 45.06914},
-                {'number':34,'pitch':14.991, 'nominal angle': 44.96549},
-                {'number':44,'pitch':15.009, 'nominal angle':-45.03455}]
-
-windowsr=[{'number':11,'pitch':90.326,  'nominal angle':-45.20793},
-                {'number':21,'pitch':89.6752,  'nominal angle': 44.79357},
-                {'number':12,'pitch':22.5203,'nominal angle': 45.05184},
-                {'number':22,'pitch':22.4797,'nominal angle':-44.94825},
-                {'number':31,'pitch':44.9187, 'nominal angle':-44.8966},
-                {'number':41,'pitch':45.0814, 'nominal angle': 45.10378},
-                {'number':32,'pitch':17.987, 'nominal angle': 44.95859},
-                {'number':42,'pitch':18.013, 'nominal angle':-45.04146},
-                {'number':33,'pitch':30.0362,  'nominal angle':-45.06914},
-                {'number':43,'pitch':29.9639,  'nominal angle': 44.93102},
-                {'number':34,'pitch':15.009, 'nominal angle': 45.03455},
-                {'number':44,'pitch':14.991, 'nominal angle':-44.96549}] #dectector side angle for ease, windows swapped...
-
-    
-def get_coordinates(path,filen,zcoord=False):
-    '''Get coordinates of all given images in list filen. If there's a random z-coordinate stuck in the middle of the filename on the log readout, deal with it'''
-    #get corresponding log file
-    os.chdir(path)
-    logs=glob.glob('*.txt')
-    print logs
-    #parse log file for coordinates of image
-    cdict={}
-    for log in logs:
-        with open(log,'rb') as f:
-            lines=f.readlines()
-            for i,line in enumerate(lines):
-                if 'Image saved:' in line:
-                    fn=line[line.find(':')+2:line.find('.tif')+4]
-                    if zcoord:
-                        #get rid of the z-coordinate that is in the name in the files but not in the actual files
-                        fn=fn[:fn.find('Z')-1]+fn[fn.rfind('_'):]
-                    if fn in filen:
-                        #print fn
-                        windex,index=get_index(fn)
-                        info_line=lines[i-1]
-                        xmm=info_line[info_line.find('X =')+4:info_line.find('mm')-1]
-                        ymm=info_line[info_line.find('Y =')+4:info_line.find('Z')-4]
-                        cdict[fn]={'number':windex,'indices':index,'im_coords':[float(xmm),float(ymm)]}
-    #return image coordinates
-    return cdict
-
-def get_index(filen):
-    '''Parse filename to get indices of image in window as well as overall window index. This helps determine whether or not it includes the edge of the window.'''
-    if len(filen) > 50: #it's the whole thing
-        filen=filen[filen.find('win')-1:]
-    windex=filen[filen.find('win')+3:filen.find('_')]
-    indices=filen[filen.find('_')+1:filen.rfind('5.0')-1]
-    if indices.endswith('_'):
-        indices= indices[:-1]
-    index=[indices[:2],indices[3:]]
-    return windex,index
+#####################################  IMAGE PREPROCESSING ###########################################
 
 def im2ndarray(filen):
     '''Convert .tif image to numpy.ndarray'''
@@ -117,13 +51,159 @@ def remove_edges(filen,im,maxx='10',maxy='13'):
         #print np.shape(im)
     return im
 
+def make_flat(flatdir, nflats=100,saveim=False):
+    '''Average all the flats. assume flats are after darks in sequential numbering'''
+    os.chdir(flatdir)
+    files=glob.glob('*.tif')
+    flats=files[-nflats:]
+    N=len(flats)
+    h,w=Image.open(flats[0]).size
+    flatarr=np.zeros((w,h),np.float)
+    #now read with PIL
+    for flat in flats:
+        imarr=np.array(Image.open(flat),dtype=np.float)
+        flatarr=flatarr+imarr/N
+    if saveim:
+        out=Image.fromarray(flatarr,mode='L')
+        out.save('flat.tif')
+        out.show()
+    return flatarr
+
+def make_dark(darkdir, ndarks=10,saveim=False):
+    '''Average all the darks'''
+    os.chdir(darkdir)
+    files=glob.glob('*.tif')
+    darks=files[:ndarks]
+    N=len(darks)
+    h,w=Image.open(darks[0]).size
+    darkarr=np.zeros((w,h),np.float)
+    #now read with PIL
+    for dark in darks:
+        imarr=np.array(Image.open(dark),dtype=np.float)
+        darkarr=darkarr+imarr/N
+    if saveim:
+        out=Image.fromarray(darkarr,mode='L')
+        out.save('dark.tif')
+        out.show()
+    return darkarr
+
+def contrast_stretch(imf,saveim=True):
+    if type(imf) == str:
+        im=im2ndarray(imf)
+    p2 = np.percentile(im, 2)
+    p98 = np.percentile(im, 98)
+    corrected_image = exposure.rescale_intensity(im, in_range=(p2, p98))
+    savec=scipy.misc.toimage(im,high=np.max(im),low=np.min(im),mode='F')
+    imname=imf[:-12]+'corrected.tif'
+    if saveim:
+        savec.save(imname)
+    return imname
+
+def correct_image(im,dark,flat,saveim=False, pickleimarr=False, contrast_stretch=False,show=False):
+    if type(im) == str:
+        im=im2ndarray(im)
+    imc=im-dark
+    flatc=flat-dark
+    corrected_image=imc/flatc
+    if contrast_stretch:
+        #contrast stretching
+        p2 = np.percentile(corrected_image, 2)
+        p98 = np.percentile(corrected_image, 98)
+        corrected_image = exposure.rescale_intensity(corrected_image, in_range=(p2, p98))
+        savec=scipy.misc.toimage(corrected_image,high=np.max(corrected_image),low=np.min(corrected_image),mode='F')
+    else:
+        savec=scipy.misc.toimage(corrected_image,high=np.max(corrected_image),low=np.min(corrected_image),mode='F')
+
+    if show:
+        fig,ax=plt.subplots()
+        ax.imshow(savec,cmap=cm.gray)
+        fig.show()
+    if saveim:
+        savec.save(saveim)
+    if pickleimarr:
+        pickle.dump(corrected_image,open(pickleimarr,'wb'))
+
+    #return corrected_image
+
+def contrast_stretch_group(imlist,cropim=False,saveim=False):
+    '''contrast stretch by position group - take the absolute minimum 2% of all images in group, max 98%. input is list of flatdark corrected images'''
+    #open all the images
+    pixlist=[]
+    for im in imlist:
+        imarr=np.array(Image.open(im))
+        if cropim:
+            imarr=imarr[cropim[0]:cropim[1],cropim[2]:cropim[3]]
+        pixlist.append(imarr)
+    p2 = np.percentile(pixlist, 2)
+    p98 = np.percentile(pixlist, 98)
+    newimnames=[]
+    #print p2,p98
+    #now scale all the images:
+    for iname,imarr in zip(imlist,pixlist):
+        corrected_image = exposure.rescale_intensity(imarr, in_range=(p2, p98))
+        if saveim: #should also save the percentages somewhere... write to a pickle?
+            savec=scipy.misc.toimage(corrected_image,high=np.max(corrected_image),low=np.min(corrected_image),mode='F')
+            imname=iname[:-12]+'groupstretch.tif'
+            newimnames.append(imname)
+            savec.save(imname)
+    return newimnames
+
+def combine_flats(prior_dir,nprior,npost,post_dir=False):
+    '''combine the flats from the post and prior measurements'''
+    prior_flat=make_flat(prior_dir,nflats=nprior)
+    if post_dir:
+        post_flat=make_flat(post_dir,nflats=npost)
+        combined_flat=(prior_flat+post_flat)/2.
+    else:
+        combined_flat=prior_flat
+
+    return combined_flat
+
+def combine_darks(prior_dir,nprior,npost,post_dir=False):
+    '''combine the dark from the post and prior measurements'''
+    prior_dark=make_dark(prior_dir,ndarks=nprior)
+    if post_dir:
+        post_dark=make_dark(post_dir,ndarks=npost)
+        combined_dark=(prior_dark+post_dark)/2.
+    else:
+        combined_dark=prior_dark
+
+    return combined_dark
+
+def flatdark(imlist, dark, flat):
+    newimnames=[]
+    for im in imlist:
+        newimname=im[:-4]+'_flatdark.tif'
+        newimnames.append(newimname)
+        correct_image(im, dark,flat, saveim=newimname)
+    return newimnames
+
+def groupstretch(imlist):
+    #first get groups of p
+    imlist.sort()
+    p0=[p for p in imlist if 'p0' in p]
+    p1=[p for p in imlist if 'p1' in p]
+    p2=[p for p in imlist if 'p2' in p]
+    p3=[p for p in imlist if 'p3' in p]
+    p4=[p for p in imlist if 'p4' in p]
+    p5=[p for p in imlist if 'p5' in p]
+    p6=[p for p in imlist if 'p6' in p]
+
+    pgroups=[p0,p1,p2,p3,p4,p5,p6]
+    newimnames=[]
+    for pimlist in pgroups:
+        newimnames.extend(contrast_stretch_group(pimlist,saveim=True))
+    return newimnames
+
+#################################################################################################################
+
 def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
     '''Make a mosaic of the given window or all windows (individually). Input: list of window numbers, dictionary of coordinates'''
     #how to deal with overlap? make left, right, top, bottom options and compare statistically effect on edge/line fits?
-    
+
     #microscope settings: mm unless pixels specified
     if mag==5.0:
-        mscope={'Magnification': 5.0, 
+        mscope={'Magnification': 5.0,
             'FOVx': 1.2512,
             'FOVy' : 0.9383,
             'ExcessX_px' : 82.0,
@@ -133,7 +213,7 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
             'StepX' : 1.2316,
             'StepY' : 0.9246}
     else: #15X
-        mscope={'Magnification': 15.0, 
+        mscope={'Magnification': 15.0,
             'FOVx': 0.4165,
             'FOVy' : 0.3128,
             'ExcessX_px' : 253.,
@@ -142,13 +222,13 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
             'ExcessY' : 0.0039,
             'StepX' : 0.4163,
             'StepY' : 0.3127}
-        
+
 
     pixX= mscope['FOVx']#1.955 #this is too big....
     pixY=mscope['FOVy']#1.9548 #from Matej's logs since mine don't have them
-    
+
     if all:
-        #generate list of window numbers from dictionary 
+        #generate list of window numbers from dictionary
         window_num=[w['number'] for w in windows]
 
     for win in window_num:
@@ -156,14 +236,14 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
         fnames = [im for im in coords.keys() if int(coords[im]['number'])== win]
         fnames.sort()
         #fnames = [im for im in fnames if coords[im]['indices'][0]== '01'] #for testing on first column
-        
+
         #get the coordinates of each image
         cwinx = [coords[im]['im_coords'][0] for im in fnames] #image x coordinates in mm
         cwiny = [coords[im]['im_coords'][1] for im in fnames] #image y coordinates in mm
         idxx  = [coords[im]['indices'][0] for im in fnames]
         idxy  = [coords[im]['indices'][1] for im in fnames]
         #convert mm to pixels
-        cpixx=np.array(cwinx)*(640.0/pixX) 
+        cpixx=np.array(cwinx)*(640.0/pixX)
         cpixy=np.array(cwiny)*(480.0/pixY)
 
         #translate coords so that top left coord is at [0,0]
@@ -177,7 +257,7 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
         #make new blank image
         background=Image.new("L",[int(np.max(cpixx)),int(np.max(cpixy))], 0xff) #[0,0] is TOP left #extra 9x12 px for rounding errors
         #background=Image.new("1",[int(np.max(cpixy))+480,int(np.max(cpixx))+640], "white") #[0,0] is TOP left
-        #print 'size:', int(np.max(cpixx))+649,int(np.max(cpixy))+492, 
+        #print 'size:', int(np.max(cpixx))+649,int(np.max(cpixy))+492,
         #put things in their place
         #fnames=[fnames[2],fnames[6]]
         mx,my,fpixx,fpixy=[],[],[],[]
@@ -204,140 +284,24 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
         mcoords=[mx,my]
         if plot: #show the mosaic
             background.show()
-        
+
         if plot_coords: #just plot the coords
             fig,ax=plt.subplots()
             #ax.scatter(cwinx,cwiny)
             ax.scatter(cpixx,cpixy)
             fig.show()
-            
+
         #now convert the mosaic to numpy array and save. Also save a .tiff image
         marray=np.array(background.convert('L')) #raw, unequalised array
         filename='window'+str(win)+'mosaic_'+str(mag)
         background.save(filename+'.tiff')
         pickle.dump(marray,open(filename+'.p','wb'))
         pickle.dump(mcoords, open(filename+'_coords.p','wb'))
-        
+
     #return new list of filenames
     return fnames,cpixx,cpixy,idxx,idxy,fpixx,fpixy#filename+'.p'
     #return mfiles
     #return fnames,cpixx,cpixy
-
-def EM_list(win,mag,ending='.tif'):
-    import glob
-    filen=glob.glob('win'+win+'*_'+mag+'X'+ending)
-    newfilen=[]
-    for f in filen:
-        if '01' not in f and '12' not in f[6:] and '09' not in f:
-            newfilen.append(f)
-    return newfilen
-
-def anisotropic_diffusion_test(filepath, canny=True,sigma=3,ht=.5,lt=.2):
-    Dimension = 2
-    PixelType = itk.ctype('float')
-    ImageType = itk.Image[PixelType, Dimension]
-    reader = itk.ImageFileReader[ImageType].New(FileName=filepath)
-    reader.Update()
-    image = reader.GetOutput()
-    #contrast stretching
-    #p2 = np.percentile(image, 2)
-    #p98 = np.percentile(image, 98)
-    #image = exposure.rescale_intensity(image, in_range=(p2, p98))
-
-    # Crop to region of interest
-    roi_filter = itk.RegionOfInterestImageFilter.New(image)
-    region = itk.ImageRegion[Dimension]()
-    index = itk.Index[Dimension]()
-    index[0] = 0
-    index[1] = 0
-    region.SetIndex(index)
-    size = itk.Size[Dimension]()
-    size[0] = 640
-    size[1] = 480
-    region.SetSize(size)
-    roi_filter.SetRegionOfInterest(region)
-    roi_filter.Update()
-    roi = roi_filter.GetOutput()
-
-    # Crop to small region of interest to experiment with smoothing parameters
-    small_roi_filter = itk.RegionOfInterestImageFilter.New(roi)
-    roi_region = itk.ImageRegion[Dimension]()
-    index = itk.Index[Dimension]()
-    index[0] = 50
-    index[1] = 50
-    roi_region.SetIndex(index)
-    size = itk.Size[Dimension]()
-    size[0] = 100
-    size[1] = 100
-    roi_region.SetSize(size)
-    small_roi_filter.SetRegionOfInterest(roi_region)
-    small_roi_filter.Update()
-    small_roi = small_roi_filter.GetOutput()
-
-
-    smoother = itk.CoherenceEnhancingDiffusionImageFilter.New(roi)
-    # Determine good parameters here: https://insightsoftwareconsortium.github.io/ITKAnisotropicDiffusionLBR/
-    smoother.SetDiffusionTime(5)
-    smoother.SetLambda(0.05)
-    smoother.SetEnhancement(3) #enum EnhancementType {CED, cCED, EED, cEED, Isotropic};
-    smoother.SetNoiseScale(2)
-    smoother.SetFeatureScale(10)
-    smoother.SetExponent(2)
-    smoother.Update()
-
-    filtered_small_roi_filter = itk.RegionOfInterestImageFilter.New(smoother)
-    filtered_small_roi_filter.SetRegionOfInterest(roi_region)
-    filtered_small_roi_filter.Update()
-    filtered_small_roi = filtered_small_roi_filter.GetOutput()
-
-    if canny: #do the canny edge detection and overlay
-        roiarr=itk.GetArrayFromImage(roi)
-        smootherarr=itk.GetArrayFromImage(smoother)
-        small_roiarr=itk.GetArrayFromImage(small_roi)
-        filtered_small_roiarr=itk.GetArrayFromImage(filtered_small_roi)
-        #contrast stretching
-        def cstretch(im):
-            p2 = np.percentile(im, 2)
-            p98 = np.percentile(im, 98)
-            im = exposure.rescale_intensity(im, in_range=(p2, p98))
-            return im
-        csroiarr=cstretch(roiarr)
-        cssmootherarr=cstretch(smootherarr)
-        cssmall_roiarr=cstretch(small_roiarr)
-        csfiltered_small_roiarr=cstretch(filtered_small_roiarr)
-      
-        
-        input_edges=feature.canny(csroiarr, sigma=sigma, high_threshold=ht, low_threshold=lt,use_quantiles=True)
-        smoothed_edges=feature.canny(cssmootherarr, sigma=sigma, high_threshold=ht, low_threshold=lt,use_quantiles=True)
-        roi_edges=feature.canny(cssmall_roiarr, sigma=sigma, high_threshold=ht, low_threshold=lt,use_quantiles=True)
-        sroi_edges=feature.canny(csfiltered_small_roiarr, sigma=sigma, high_threshold=ht, low_threshold=lt,use_quantiles=True)
-        
-    fig, axs = plt.subplots(2, 2, figsize=(12,12))
-    #print(axs)
-    axs[0,0].imshow(itk.GetArrayViewFromImage(roi), cmap='gray', vmin=0)
-    axs[0,0].axis('off')
-    axs[0,0].set_title('Input')
-    axs[0,1].imshow(itk.GetArrayViewFromImage(smoother), cmap='gray', vmin=0)
-    axs[0,1].axis('off')
-    axs[0,1].set_title('Smoothed')
-    axs[1,0].imshow(itk.GetArrayViewFromImage(small_roi), cmap='gray', vmin=0)
-    axs[1,0].axis('off')
-    axs[1,0].set_title('Region of Interest')
-    axs[1,1].imshow(itk.GetArrayViewFromImage(filtered_small_roi), cmap='gray', vmin=0)
-    axs[1,1].axis('off')
-    axs[1,1].set_title('Smoothed Region of Interest')
-    if canny:
-        axs[0,0].imshow(np.ma.masked_where(input_edges == 0,input_edges),cmap=cm.autumn)
-        #scalebar = ScaleBar(pix2um,'um', SI_LENGTH,length_fraction=length) # 1 pixel = 0.2 meter
-        #axs[0,0].add_artist(scalebar)
-        axs[0,1].imshow(np.ma.masked_where(smoothed_edges == 0,smoothed_edges),cmap=cm.autumn)
-        #axs[0,1].add_artist(scalebar)
-        axs[1,0].imshow(np.ma.masked_where(roi_edges == 0,roi_edges),cmap=cm.autumn)
-        #axs[1,0].add_artist(scalebar)
-        axs[1,1].imshow(np.ma.masked_where(sroi_edges == 0,sroi_edges),cmap=cm.autumn)
-        #axs[1,1].add_artist(scalebar)
-    fig.show()
-    fig.savefig('comparison_figure.png')
 
 def anisotropic_diffusion(filepath):
     Dimension = 2
@@ -346,7 +310,7 @@ def anisotropic_diffusion(filepath):
     reader = itk.ImageFileReader[ImageType].New(FileName=filepath)
     reader.Update()
     image = reader.GetOutput()
-    
+
     # Crop to region of interest
     roi_filter = itk.RegionOfInterestImageFilter.New(image)
     region = itk.ImageRegion[Dimension]()
@@ -373,10 +337,10 @@ def anisotropic_diffusion(filepath):
     smoother.Update()
 
     smootherarr=itk.GetArrayFromImage(smoother)
-    return smootherarr        
+    return smootherarr
 
-    
-def Canny_edge(filen,sigma=3,mag=5.0,anisotropic=True,binary=False,gauss=False,plot=False,outfilen=False):
+
+def Canny_edge(filen,sigma=3,mag=5.0,anisotropic=False,binary=False,gauss=False,plot=False,outfilen=False):
     #max contrast
     if filen.endswith('.p'):
         imarr=pickle.load(open(filen,'rb'))
@@ -386,11 +350,13 @@ def Canny_edge(filen,sigma=3,mag=5.0,anisotropic=True,binary=False,gauss=False,p
     #im = exposure.equalize_hist(imarr)    #should probably do this AFTER removing the edges...
     if mag==5.0:
         im=remove_edges(filen,imarr)
-    else:
+    elif mag ==15.0:
         im=remove_edges(filen,imarr,maxx='12',maxy='16')
-        
+    else:
+        im=imarr
+
     #for the finest grids, use sigma=2
-    windex,foo=get_index(filen)
+    #windex,foo=get_index(filen)
     #if windex in ['32','42','34','44']: #although I should actually use the dictionary keys to do this stuff in case we change the naming convention
     #    sigma=2
     #if windex in ['11','21']: #although I should actually use the dictionary keys to do this stuff in case we change the naming convention
@@ -406,7 +372,7 @@ def Canny_edge(filen,sigma=3,mag=5.0,anisotropic=True,binary=False,gauss=False,p
     p2 = np.percentile(im, 2)
     p98 = np.percentile(im, 98)
     im = exposure.rescale_intensity(im, in_range=(p2, p98))
-    
+
     if gauss:
         im = ndi.gaussian_filter(im, gauss)
 
@@ -439,7 +405,206 @@ def Canny_edge(filen,sigma=3,mag=5.0,anisotropic=True,binary=False,gauss=False,p
     else:
         newfilen=outfilen
     pickle.dump(edges,open(newfilen,'wb'))
-    return newfilen
+    return edges,newfilen
+
+def clean_centers(edges,tolerance=False,plot=False,sigma=2.):
+    '''clean out the Canny edge array so that pixel bins with low counts (ie probably bad edges) get deleted below a certain threshold'''
+    esum=np.sum(edges,axis=0)
+    cleaned_edges=np.copy(edges)
+    if not tolerance:
+        tolerance=np.mean(esum)+sigma*np.std(esum)
+    #print tolerance
+    for i,col in enumerate(esum):
+        if col < tolerance and col != 0:
+            #print i, col
+            cleaned_edges[:,i] = False
+    if plot:
+        cleaned_sum=np.sum(cleaned_edges,axis=0)
+        fig,ax=plt.subplots()
+        ax.plot(range(0,len(esum)),esum, label='original')
+        ax.plot(range(0,len(cleaned_sum)),cleaned_sum,label='cleaned')
+        ax.axhline(tolerance,c='k',linestyle='--')
+        ax.legend(loc='upper right')
+        ax.set_xlim([0,2040])
+        fig.show()
+    return cleaned_edges
+
+def plot_centers_and_edges(edges,cleaned_edges, datafile):
+    dd=pickle.load(open(datafile,'rb'))
+    esum=np.sum(edges,axis=0)
+    tolerance=np.mean(esum)+2.*np.std(esum)
+    cleaned_sum=np.sum(cleaned_edges,axis=0)
+    rising=dd['rising']
+    falling=dd['falling']
+
+    fig,ax=plt.subplots()
+    ax.plot(range(0,len(esum)),esum, label='original')
+    ax.plot(range(0,len(cleaned_sum)),cleaned_sum,label='cleaned')
+    ax.axhline(tolerance,c='k',linestyle='--')
+    ax.scatter(rising,tolerance*np.ones(len(rising)),c='r',marker='v',label='rising')
+    ax.scatter(falling,tolerance*np.ones(len(rising)),c='k',marker='o',label='falling')
+    ax.legend(loc='upper right')
+    ax.set_xlim([0,2040])
+    fig.show()
+
+def sum_peaks(cleaned_edges, tol=2,irange=False):#irange=[1087,1105]):
+    '''Get the locations of the peaks of a (Gaussian?) fit to the histogram of sums, return these as the width array. Tolerance is number of False allowed between Trues to still be considered a group'''
+    esum=np.sum(cleaned_edges,axis=0)
+    if irange:
+        esum=esum[irange[0]:irange[1]]
+    group_hist,group_xvec=[],[]
+    #first get the groups of True values
+    group=False
+    for i,es in enumerate(esum[:-1]):
+        if irange:
+            print i+irange[0],es,group
+        if es != 0.0 and not group:
+            lhist=[es]
+            lxvec=[i]
+            group=True
+        elif es !=0.0 and group:
+            lhist.append(es)
+            lxvec.append(i)
+            #print 'here',esum[i+1]
+            if np.mean(esum[i+1:i+tol]) == 0 :
+                #print 'here'
+                group=False
+        else:
+            group=False
+        if not group:
+            try:
+                if lhist not in group_hist:
+                    group_hist.append(lhist)
+                    group_xvec.append(lxvec)
+            except NameError:
+                continue
+    #now build little histograms out of the groups and fit gaussians to them. return the new x-vector (float!) of peak locations
+    #this actually doesn't work well because there are so few points they don't make a normal distribution! So let's take the weighted average instead
+    xpeak=[]
+    #print group_xvec,group_hist
+    for xg,yg in zip(group_xvec,group_hist):
+        xpeak.append(np.average(xg, weights=yg))
+        #if len(xg) > 2: #can't make a gaussian out of only 2 points...
+        #    xpeak.append(gauss_peak(xg,yg))
+        #else:
+        #    xpeak.append(np.mean(xg))
+
+    return xpeak
+
+def gauss_peak(xdata,ydata,npts=50,show=False,ret_data=False):
+    ''' returns peak of gaussian fit to data'''
+    #x-coord does not have to be an integer!
+    # Create a function which returns a Gaussian (normal) distribution.
+    def gauss(x,*p0):
+        if len(p0) == 1:
+            a,b,c,d=p0[0]
+        else:
+            a,b,c,d=p0
+        y = a*np.exp(-np.power((x - b), 2.)/(2. * c**2.)) + d
+        return y
+    #interpolate x and y so greater than 4 (or else curvefit doesn't work)
+    if len(xdata) < 4:
+        intfunc=interpolate.interp1d(xdata,ydata)
+        xint=np.linspace(xdata[0],xdata[-1],10)
+        yint=intfunc(xint)
+    else:
+        xint=np.array(xdata)
+        yint=np.array(ydata)
+    popt, pcov = curve_fit(gauss, xint, yint,p0=[0,0,0,np.mean(yint)])#, p0=p_initial, sigma=e)
+    #generate high-resolution version of gaussian curve and get the maximum:
+    xvec=np.linspace(xdata[0],xdata[-1],npts)
+    yvec=gauss(xvec,popt) #[0]
+    xpeak=xvec[np.where(yvec == np.max(yvec))[0]][0]
+    if show:
+        fig,ax=plt.subplots()
+        ax.plot(xint,yint)
+        ax.plot(xvec,yvec)
+        fig.show()
+    if ret_data:
+        return xvec,yvec
+    else:
+        return xpeak #,ypeak
+
+def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,stats=True,gauss=False,tolerance=False,n=5):
+    '''basically same as slit_or_slat() plus histogramming'''
+    #if not ang:
+    p0ang=imfile[6:imfile.rfind('_')]
+    #else:
+    #    p0ang=ang
+    im=np.array(Image.open(imfile))
+    imsum=np.sum(im,axis=0)
+    immean=np.mean(imsum)
+
+    if not xpeak:
+        efile=glob.glob(imfile[:-4]+'_edges.p')
+        if len(efile) > 0:
+            edges=pickle.load(open(efile[0],'rb'))
+        else:
+            edges,_=Canny_edge(imfile,sigma=3,gauss=gauss,plot=False,mag=False)
+        cleaned_edges=clean_centers(edges,sigma=tolerance)
+        xpeak=sum_peaks(cleaned_edges,tol=n)
+
+    xpeak_int=[int(x) for x in xpeak]
+    xpeak_int.sort()
+
+    #determine if edges are rising or falling
+    rising=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imsum[xpeak_int[i]:xpeak_int[i+1]]) > immean] #need xpeaks to be integers now
+    falling=[xpeak[i+1] for i in range(0,len(xpeak)-1) if np.mean(imsum[xpeak_int[i]:xpeak_int[i+1]]) > immean]
+
+    if falling[0] > rising[0]:
+        width=[f-r for r,f in zip(rising,falling)]#falling-rising
+    else: #first one is falling
+        width=[f-r for r,f in zip(rising,falling[1:])]
+
+    periodr= [rising[i+1] - rising[i] for i in range(0,len(rising)-1)]#rising-rising
+    periodf=[falling[i+1] - falling[i] for i in range(0,len(falling)-1)]#falling - falling
+    period=periodr#np.mean(periodr+periodf)
+    period.extend(periodf)
+
+#     if width != []:
+#         width=filter(lambda a:a > n,width) #filter out all the 0- n px separations
+#         median=np.median(width) #assume it gets it right more often than not. might not be the case for the finer grids...
+#         #print median
+#         period=[]
+#         for i in range(0,len(width)-1):
+#             #which is smaller, width % median, width % n*median?
+#             factor=float(int(width[i])/int(median))
+#             if factor == 0:
+#                 factor = 1.
+#             #print width[i],factor
+#             period.append(width[i]/factor)
+#         period=np.array(period)*pix2um # need to account for the fact that it's rotated! width is not true width!
+#     else:
+#         period =[]
+    if plot:
+        #make the histogram
+        fig,ax=plt.subplots()
+        bins=np.arange(np.min(period),np.max(period),np.std(period)/5.)
+        ax.hist(period,bins)
+        #ax.set_xlim([nperiod-5,nperiod+5])
+        ax.set_yscale('log')
+        ax.set_ylim([1,10000])
+        #figfilename='win'+str(window_num)+'_group_periods'+str(mag)+'.png'
+        #fig.savefig(figfilename)
+        fig.show()
+
+    if stats: #print out and pickle stats
+        avg=np.mean(period) #here period is slit width ...what if I want to plot the actual period?
+        med=np.median(period)
+        stdv=np.std(period)
+        statfile='win'+str(window_num)+'_width_stats_'+p0ang+'.p'
+        datafile='win'+str(window_num)+'_width_data_'+p0ang+'.p'
+        print "-------------------STATISTICS FOR WINDOW "+str(window_num)+"---------------------"
+        print '              Mean: ' + str(avg)
+        print '            Median: ' + str(med)
+        print 'Standard Deviation: ' + str(stdv)
+        print 'Results saved in ' + statfile
+        data={'period':period,'rising':rising,'falling':falling,'widths':width}
+        stdict={'mean':avg,'median':med,'stddev':stdv}
+        pickle.dump(stdict,open(statfile,'wb'))
+        pickle.dump(data,open(datafile,'wb'))
+
+    return period,width
 
 def print_all_stats(win):
     statfiles=glob.glob('win'+str(win) + '*_stats*'+'.p')
@@ -447,93 +612,13 @@ def print_all_stats(win):
         stdict=pickle.load(open(st,'rb'))
         avg=stdict['mean']
         med=stdict['median']
-        stdv=stdict['stddev']        
+        stdv=stdict['stddev']
         print "-------------------STATISTICS FOR WINDOW "+str(win)+"---------------------"
         print '              Mean: ' + str(avg)
         print '            Median: ' + str(med)
         print 'Standard Deviation: ' + str(stdv)
         print 'Results saved in ' + st
 
-
-def compare_methods(win,ll=[50,100,150],tol=3,sigma=2,first=True,second=True,third=True,fourth=True,nang=-44.7935):
-    '''compare 3 different pre-processing methods and their effect on the overall statistics'''
-    filen=glob.glob('win'+str(win)+'*_5.0X.tif')
-    filep,fileh=[],[]
-    
-    #first method - usual
-    if first:
-        for f in filen:
-            filep.append(Canny_edge(f,mag=5.0,anisotropic=False, binary=False,outfilen=f[:-4]+"_edges.p",sigma=sigma))
-        for l in ll:
-            tag='ll'+str(l)
-            for f in filep:
-                fileh.append(prob_hough(f,line_length=l,spread=2.,tag=tag,overwrite=True)) #new list of picklefiles
-
-        cat_hough(win,weights=[1,1,1],tags=['ll'+str(ll[0]),'ll'+str(ll[1]),'ll'+str(ll[2])],mag=5.0,EM=False)
-        fileh=glob.glob('win'+str(win)+'*_5.0X_hough_all.p')
-        figname='win'+str(win) + 'ang_hist.png'
-        theta=hough_hist(fileh,win,figname=figname,tol=tol,side=1.,spread=2.,ret=True)
-        offset=np.mean(theta)-nang
-        figname='win'+str(win) + 'width_hist.png'
-        if len(filen) !=0:
-            w,b,f=get_period_by_grouping(win,ftags='X',mosaic=False,EM=False,tolerance=.85,offset=offset,mag=5.0,side=1,fitangle=False,plot=True)
-
-    #second - anisotropic diffusion
-    if second:
-        filep,fileh=[],[]
-        for f in filen:
-            filep.append(Canny_edge(f,mag=5.0,anisotropic=True, binary=False,outfilen=f[:-4]+"_ani_edges.p",sigma=sigma))
-        for l in ll:
-            tag='ani_ll'+str(l)
-            for f in filep:
-                fileh.append(prob_hough(f,line_length=l,spread=2.,tag=tag,overwrite=True)) #new list of picklefiles
-
-        cat_hough(win,imtags='X_ani_',weights=[1,1,1],tags=['ani_ll'+str(ll[0]),'ani_ll'+str(ll[1]),'ani_ll'+str(ll[2])],mag=5.0,EM=False,outtag='ani')
-        fileh=glob.glob('win'+str(win)+'*_5.0X_ani_hough_ani.p')
-        figname='win'+str(win) + 'ang_hist_ani.png'
-        theta=hough_hist(fileh,win,figname=figname,tol=tol,side=1.,spread=2,ret=True)
-        offset=np.mean(theta)-nang
-        figname='win'+str(win) + 'width_hist_ani.png'
-        if len(filen) !=0:
-            w,b,f=get_period_by_grouping(win,ftags='X_ani*',mosaic=False,EM=False,tolerance=.85,offset=offset,mag=5.0,side=1.,fitangle=False,plot=True)
-            
-    #third - binary
-    if third:
-        filep,fileh=[],[]
-        for f in filen:
-            filep.append(Canny_edge(f,mag=5.0,anisotropic=False, binary=True,outfilen=f[:-4]+"_bin_edges.p",sigma=sigma))
-        for l in ll:
-            tag='bin_ll'+str(l)
-            for f in filep:
-                fileh.append(prob_hough(f,line_length=l,spread=2.,tag=tag,overwrite=True)) #new list of picklefiles
-                
-        cat_hough(win,imtags='X_bin_',weights=[1,1,1],tags=['bin_ll'+str(ll[0]),'bin_ll'+str(ll[1]),'bin_ll'+str(ll[2])],mag=5.0,EM=False,outtag='bin')
-        fileh=glob.glob('win'+str(win)+'*_5.0X_bin_hough_bin.p')
-        figname='win'+str(win) + 'ang_hist_bin.png'
-        theta=hough_hist(fileh,win,figname=figname,tol=tol,side=1.,spread=2.,ret=True)
-        offset=np.mean(theta)-nang
-        figname='win'+str(win) + 'width_hist_bin.png'
-        if len(filen) !=0:
-            w,b,f=get_period_by_grouping(win,ftags='X_bin*',mosaic=False,EM=False,tolerance=.85,offset=offset,mag=5.0,side=1.,fitangle=False,plot=True)
-
-    #fourth - both
-    if fourth:
-        filep,fileh=[],[]
-        for f in filen:
-            filep.append(Canny_edge(f,mag=5.0,anisotropic=True, binary=True,outfilen=f[:-4]+"_both_edges.p",sigma=sigma))
-        for l in ll:
-            tag='bin_ll'+str(l)
-            for f in filep:
-                fileh.append(prob_hough(f,line_length=l,spread=2.,tag=tag,overwrite=True)) #new list of picklefiles
-                
-        cat_hough(win,imtags='X_both_',weights=[1,1,1],tags=['bin_ll'+str(ll[0]),'bin_ll'+str(ll[1]),'bin_ll'+str(ll[2])],mag=5.0,EM=False,outtag='bin')
-        fileh=glob.glob('win'+str(win)+'*_5.0X_both_hough_bin.p')
-        figname='win'+str(win) + 'ang_hist_both.png'
-        theta=hough_hist(fileh,win,figname=figname,tol=tol,side=1.,spread=2.,ret=True)
-        offset=np.mean(theta)-nang
-        figname='win'+str(win) + 'width_hist_both.png'
-        if len(filen) !=0:
-            w,b,f=get_period_by_grouping(win,ftags='X_both*',mosaic=False,EM=False,tolerance=.85,offset=offset,mag=5.0,side=1.,fitangle=False,plot=True)
 
 def reEdge(filen,sigma=3,gauss=3,plot=True):
     '''Take Canny edge image, Gaussian blur and re-edge detect to see what happens...'''
@@ -597,7 +682,7 @@ def edge_peek(filen,mag=5.0,length=0.2):
     ax.set_title('Input image overlaid with Canny edges')
     ax.set_axis_off()
     fig.show()
-    
+
 def hough_peek(filen,edgef=False,mag=5.0,length=0.2):
     '''Plot Hough fits over Canny edges for a given file'''
     from matplotlib_scalebar.scalebar import ScaleBar
@@ -609,7 +694,7 @@ def hough_peek(filen,edgef=False,mag=5.0,length=0.2):
         pix2um=(1.2512/640.)*1000.
     else:
         pix2um=0.6
-        
+
     edata=pickle.load(open(edgef,'rb'))
     fig, ax = plt.subplots(1, 1, figsize=(7, 6))
     ax.imshow(np.ma.masked_where(edata == 0,edata),cmap=cm.gray)
@@ -621,7 +706,7 @@ def hough_peek(filen,edgef=False,mag=5.0,length=0.2):
     ax.add_artist(scalebar)
     ax.set_title('Canny edges overlaid with probabilistic Hough')
     ax.set_axis_off()
-    fig.show()     
+    fig.show()
 
 
 def extend_line(line,shape=[640,480],plot=False):
@@ -634,13 +719,13 @@ def extend_line(line,shape=[640,480],plot=False):
     #if dxs >= shape[0]/2 and dys <=shape[1]/2: #look closer to bottom right corner...assume all slopes are +-45 degrees
     xvec=np.arange(0,shape[0],1)
     #x2=np.arange(int(xvec),shape[0],1)
-    y2=slope*(xvec - np.float(start[0])) +np.float(start[1])   
+    y2=slope*(xvec - np.float(start[0])) +np.float(start[1])
     #else:
     #    x2=np.arange(0,int(np.float(start[0])+np.float(dxs)/np.sqrt(2.)+3),1)
-    #    y2=slope*(x2 - np.float(start[0])) +np.float(start[1])   
+    #    y2=slope*(x2 - np.float(start[0])) +np.float(start[1])
 
     #now get endpoints for parts of the line that are within the frame - need to re-do limit on y!
-    if y2[0] < y2[-1]: 
+    if y2[0] < y2[-1]:
         xi=np.where(y2 >= 0.)[0][0]
         try:
             xf=np.where(y2 >=shape[1]-1)[0][0]
@@ -663,9 +748,9 @@ def extend_line(line,shape=[640,480],plot=False):
         ax.plot((start[0],end[0]),(start[1],end[1]))
         ax.plot((s1[0],e1[0]),(s1[1],e1[1]),'r--')
         fig.show()
-    
+
     return extended_line#,xvec,y2
-    
+
 def same_line(lines,tol=3, plot=False):
     """Test if two or more Hough line segments lie on the same line. Returns lists of line segments that fall on the same line, within a certain tolerance at the endpoints"""
     extended_lines,matches,singles=[],[],[]
@@ -674,7 +759,7 @@ def same_line(lines,tol=3, plot=False):
         start=line[0]
         end=line[1]
         extended_lines.append(extend_line(line)) #extend the line as far as it can go within the boundaries of the frame
-        
+
     #now test extended lines against each other
     allxl=[(l[0][0],l[1][0]) for l in lines]
     allyl=[(l[0][1],l[1][1]) for l in lines]
@@ -701,7 +786,7 @@ def same_line(lines,tol=3, plot=False):
             else:
                 duplicate = False
                 #print l,m, duplicate
-        if duplicate == False:    
+        if duplicate == False:
             matches.append([((xl[0],yl[0]),(xl[1],yl[1])) for x,xl,yl in zip(allx,allxl,allyl) if x[0] in padded_ex1 and x[1] in padded_ex2]) #now need to append the actual line segments associated with the extended lines
     for m in matches:
         if len(m) == 1: #find singles
@@ -721,9 +806,9 @@ def same_line(lines,tol=3, plot=False):
     #print len(singles)
     for s in singles:
         unique_matches.append(s)
-            
+
         #if so, ...group and return
-        
+
     if plot:
         fig,ax=plt.subplots()
         scale=len(unique_matches)
@@ -737,7 +822,7 @@ def same_line(lines,tol=3, plot=False):
         fig.show()
 
     return unique_matches
-    
+
 def rising_or_falling(rotim,rotarr,immean,plot=False,imfile=False,shape=False,rerotate=False, test=False):
     """Determine if an edge is rising (dark -> light) or falling (light -> dark). Return indexed mask"""
     imsize=np.shape(rotim)
@@ -753,8 +838,8 @@ def rising_or_falling(rotim,rotarr,immean,plot=False,imfile=False,shape=False,re
     tv=np.where(meanarr > np.max(meanarr[0:50]))
     tvshape=np.shape(tv)[1]
     #get rising
-    rising=[tv[0][i] for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) > 1.25*immean and tv[0][i+1] != tv[0][i]+1 ] 
-    
+    rising=[tv[0][i] for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) > 1.25*immean and tv[0][i+1] != tv[0][i]+1 ]
+
     mask[:,rising]= 1
     #get falling
     falling=[tv[0][i] for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) < .75*immean and tv[0][i+1] != tv[0][i]+1 ]
@@ -769,12 +854,12 @@ def rising_or_falling(rotim,rotarr,immean,plot=False,imfile=False,shape=False,re
         print 'means: ', [np.mean(meani[tv[0][i]:tv[0][i+1]]) for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) > 1.25*immean and tv[0][i+1] != tv[0][i]+1 ][:10]
         print 'first few falling: ', falling[:10]
         print 'means: ',[np.mean(meani[tv[0][i]:tv[0][i+1]]) for i in range(0,tvshape-1) if np.mean(meani[tv[0][i]:tv[0][i+1]]) < .75*immean and tv[0][i+1] != tv[0][i]+1 ][:10]
-        
+
     if len(rising)-len(falling) > 3.*np.max([len(rising),len(falling)]):
          #print 'check mask!'
          #plot=True
          mask=[]
-        
+
     if plot:
         #import make_mask as mm
         #mm.mask_peek('win11_05_05_5.0X.tif',mask)
@@ -807,7 +892,7 @@ def thin_to_binary(subarr,left):
         else:
             maxloc= np.where(row == np.max(row))
             thinnedarr[i,maxloc] =maxloc+left
-            
+
             #alledges= np.where(row != 0)
             #thinnedarr[i,maxloc] =np.mean(row[alledges])
 
@@ -865,15 +950,13 @@ def group_edges_by_idx(rotarr,mask,nomp,mod=3,plot=False,tolerance=.6,from_line 
         ax[1].scatter(x,fmean)
         ax[1].plot(x,yfitf(x),'k--')
         #ax.scatter(np.arange(0,len(rising),1),rmean)
-        print 'line of best fit rising: '+str(liner[0])+'*x + ' +str(liner[1]) 
-        print 'line of best fit falling: '+str(linef[0])+'*(x) + ' +str(linef[1]) 
+        print 'line of best fit rising: '+str(liner[0])+'*x + ' +str(liner[1])
+        print 'line of best fit falling: '+str(linef[0])+'*(x) + ' +str(linef[1])
         fig.show()
-        
-    
+
+
     return periodr,periodf
 
-def build_mosaic_mask():
-    return 'foo'
 
 def group_edges_by_mosaic_idx(rotarr,mask,nomp,mod=3,plot=True,tolerance=.6,from_line = True):
     '''Group edges based on mosaic mask index'''
@@ -909,7 +992,7 @@ def group_edges_by_mosaic_idx(rotarr,mask,nomp,mod=3,plot=True,tolerance=.6,from
     periodf= [fmean[j+1]-fmean[j] for j in range(0,len(fmean)-1)]
     periodf = [p for p in periodf if p > tolerance*nomp and p < (2.-tolerance)*nomp]
     #print np.mean(periodr)*1.955,np.mean(periodf)*1.955#, np.mean(periodr.extend(periodf))*1.955
-    
+
     return periodr,periodf
 
 def test_mask(ef, im, nang):
@@ -938,7 +1021,7 @@ def get_period_by_grouping(window_num,mag=5.0,ftags='X*',plot=False,side=1.0,pix
     #first get the files
     if EM:
         edgef=EM_list(str(window_num),str(mag),ending='_edges.p')
-    else:    
+    else:
         edgef=glob.glob('win'+str(window_num)+'_*' + str(mag)+ftags+'_edges.p')
     if EM:
         imf=EM_list(str(window_num),str(mag),ending='.tif')
@@ -993,14 +1076,14 @@ def get_period_by_grouping(window_num,mag=5.0,ftags='X*',plot=False,side=1.0,pix
             print im
 
     print 'bad masks ', badmasks
-            
+
     periods=rperiods
     periods.extend(fperiods)
 
     rperiods=np.array(rperiods)*pix2um
     fperiods=np.array(fperiods)*pix2um
     periods=np.array(periods)*pix2um
-        
+
     if plot:
         #make the histogram
         fig,ax=plt.subplots(1,3,sharex=True,sharey=True)
@@ -1019,7 +1102,7 @@ def get_period_by_grouping(window_num,mag=5.0,ftags='X*',plot=False,side=1.0,pix
         figfilename='win'+str(window_num)+'_group_periods'+str(mag)+ftags+'.png'
         fig.savefig(figfilename)
         fig.show()
-        
+
     if stats: #print out and pickle stats
         avg=np.mean(periods)
         med=np.median(periods)
@@ -1066,7 +1149,7 @@ def slit_or_slat(j,row,imarr,immean,pix2um): #for j,row in enumerate(edges): #MP
                 period.append(width[i])
             elif width[i] < mean-sigma or width[i+1] < mean-sigma: #discard it
                 continue
-            else: #add it to the previous one UNLESS the next one is a double! then just continue 
+            else: #add it to the previous one UNLESS the next one is a double! then just continue
                 if width[i+1] < mean+sigma and  width[i+1] > mean-sigma:
                     period.append(width[i]+width[i+1])
         period=np.array(period)*pix2um # need to account for the fact that it's rotated! width is not true width!
@@ -1105,7 +1188,7 @@ def slit_or_slat_full(edges,imarr,immean,pix2um):
          #           period.append(slat_width[i])
          #       elif slat_width[i] < mean-sigma or slat_width[i+1] < mean-sigma: #discard it
          #           continue
-         #       else: #add it to the previous one UNLESS the next one is a double! then just continue 
+         #       else: #add it to the previous one UNLESS the next one is a double! then just continue
          #           if slat_width[i] < mean+sigma and  slat_width[i] > mean-sigma:
          #               #now we have to look at the corresponding slits:
          #               if slit_width[i] < mean+sigma and  slit_width[i] > mean-sigma:
@@ -1119,7 +1202,7 @@ def slit_or_slat_full(edges,imarr,immean,pix2um):
         #print sigma,mean
         period=[]
         if sigma > mean: sigma=0.25*mean
-        for i in range(0,len(width)-1): #let's hope these arrays are equally long....                
+        for i in range(0,len(width)-1): #let's hope these arrays are equally long....
             if width[i] > 2*mean-sigma and width[i] < 2*mean+sigma: #it's an entire period
                 period.append(width[i])
             elif width[i+1] < mean+sigma and  width[i+1] > mean-sigma:
@@ -1165,7 +1248,7 @@ def get_slit_width(edges,mag=5.0,im=False,window_num=False, title='',xran=[0,45]
     print 'preparation took %.2f seconds' % (time.time()-start)
     ltime=time.time()
     #immean=np.mean(imarr) #save time and not do this every call to slit_or_slat()
-    
+
     if type(edges) == list: #it's a list of edge pickles
         for earr in edges:
             edgearr=pickle.load(open(earr,'rb'))
@@ -1218,7 +1301,7 @@ def get_slit_width(edges,mag=5.0,im=False,window_num=False, title='',xran=[0,45]
         pickle.dump(stdict,open(statfile,'wb'))
         pickle.dump(data,open(datafile,'wb'))
 
-        
+
     fig,ax=plt.subplots()
     bins=ax.hist(np.array(widths_vec),np.arange(np.min(widths_vec),np.max(widths_vec),pix2um))
     ax.set_xlabel('Separation of Edge Pixels ($\mu$m)')
@@ -1233,8 +1316,8 @@ def get_slit_width(edges,mag=5.0,im=False,window_num=False, title='',xran=[0,45]
         fig.savefig(figname)
     plt.close(fig)
     return widths,bins
-        
-    
+
+
 def get_theta_range(edges,side=1.0,spread=5.,n=201):
     #define range of theta around theta_nominal
     if type(edges) == int:
@@ -1256,7 +1339,7 @@ def get_theta_range(edges,side=1.0,spread=5.,n=201):
         nang=-1*nang[0]
     theta0= nang*(np.pi/180.)#in radians
     #tendeg2rad=np.pi/18.
-    spreaddeg2rad=spread*(np.pi/180.)  
+    spreaddeg2rad=spread*(np.pi/180.)
     thetaran = np.linspace(theta0-spreaddeg2rad, theta0+spreaddeg2rad, num=n)#in radians
     return thetaran
 
@@ -1340,8 +1423,8 @@ def straight_hough(edges,plot=False,side=1.0,spread=5.,n=201):
             return newfilen
     except ValueError:
         pass
-    
-def lines2data(lines): 
+
+def lines2data(lines):
     '''convert lines to binary numpy array'''
     data=np.zeros([640,480])
     for line in lines:
@@ -1379,16 +1462,16 @@ def whole_window_hough_hist(window_num,path, plot=False,ymax=10000):
         if window_num == w['number']:
             angle=w['nominal angle']
     rotim=imrotate(bigarray,angle)
-    
+
     #compress along the y-axis...
     bigvector=np.sum(rotim,axis=0)
-    
+
     fig,ax=plt.subplots()
     #ax.plot(np.arange(640),bigvector)
     #n,bins=ax.hist(bigvector,np.linspace(0,640,640), facecolor='b')
     for nd in ndlist:
         ax.imshow(nd.T, alpha=.5,cmap=cm.gray)
-    
+
     #if plot:
     #    ax.set_xlim([0,640])
     #    ax.set_xlabel('Distance across grid (px)')
@@ -1396,7 +1479,7 @@ def whole_window_hough_hist(window_num,path, plot=False,ymax=10000):
         #ax.set_yscale('log')
         #ax.set_ylim([1,ymax])
     #fig.show()
-        
+
     #return n,bins
     return ndlist,bigarray
 
@@ -1479,7 +1562,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
         for f in lines:
             if f != None:
                 llist.append(pickle.load(open(f,'rb')))
-            #print f,np.shape(pickle.load(open(f,'rb')))  
+            #print f,np.shape(pickle.load(open(f,'rb')))
         #print np.shape(llist)
     for i,l in enumerate(llist):
         if i == 0:
@@ -1495,7 +1578,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
                 lines=all_lines
     if theta == []:
         for l in lines:
-            #if get_length(l) >= 50.: 
+            #if get_length(l) >= 50.:
             #if get_angle(l) != 45.0 and get_angle(l) != -45.0: #suppress the 45.0 value as a test...
             try:
                 theta.append(get_angle(l))
@@ -1530,7 +1613,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
     if side==1.0:
         ang=[aa['nominal angle'] for aa in windows if aa['number']==windownum]
     else:
-        ang=[aa['nominal angle'] for aa in windowsr if aa['number']==windownum]            
+        ang=[aa['nominal angle'] for aa in windowsr if aa['number']==windownum]
 
     if stats: #print out and pickle stats
         avg=np.mean(theta)
@@ -1548,7 +1631,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
         pickle.dump(stdict,open(statfile,'wb'))
         pickle.dump(theta,open(datafile,'wb'))
 
-    
+
     if windownum:
         #ang=[aa['nominal angle'] for aa in windows if aa['number']==windownum]
         xran=[side*ang[0]-2.,side*ang[0]+2.]
@@ -1567,7 +1650,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
         ax.set_yscale('log')
         ax.set_ylim([1,100000])
     #else:
-    #    ax.set_ylim([0,1])   
+    #    ax.set_ylim([0,1])
     fig.show()
     if figname:
         fig.savefig(figname)
@@ -1575,7 +1658,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
     #plt.close(fig)
     if ret:
         return theta
-    
+
 def straight_hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=False,stats=True,figname=False,side=1.0,spread=5.,n=201): #cuz of mpi
     '''Make a histogram of the line orientations returned by straight line Hough'''
     theta=[]
@@ -1596,7 +1679,7 @@ def straight_hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=Fals
     if side==1.0:
         ang=[aa['nominal angle'] for aa in windows if aa['number']==windownum]
     else:
-        ang=[aa['nominal angle'] for aa in windowsr if aa['number']==windownum]            
+        ang=[aa['nominal angle'] for aa in windowsr if aa['number']==windownum]
 
     if stats: #print out and pickle stats
         avg=np.mean(theta)
@@ -1614,7 +1697,7 @@ def straight_hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=Fals
         pickle.dump(stdict,open(statfile,'wb'))
         pickle.dump(theta,open(datafile,'wb'))
 
-    
+
     if windownum:
         #ang=[aa['nominal angle'] for aa in windows if aa['number']==windownum]
         xran=[side*ang[0]-2.,side*ang[0]+2.]
@@ -1633,7 +1716,7 @@ def straight_hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=Fals
         ax.set_yscale('log')
         ax.set_ylim([1,100000])
     else:
-        ax.set_ylim([0,len(lines)])   
+        ax.set_ylim([0,len(lines)])
     fig.show()
     if figname:
         fig.savefig(figname)
@@ -1641,7 +1724,7 @@ def straight_hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=Fals
     #plt.close(fig)
     if ret:
         return theta
-    
+
 def get_length(line):
     '''Get length of line via Pythagoras'''
     deltax=line[1][0]-line[0][0]
@@ -1657,32 +1740,11 @@ def get_angle(line):
     thetadeg=np.rad2deg(theta) #theta*180./np.pi
     return thetadeg
 
-##plot outilers
-#out1,out2=[],[]
-#for l1,l2 in zip(lines1,lines2):
-#    if get_angle(l1) !=-45.0:
-#       #theta1.append(get_angle(l1))
-#       out1.append(l1)
-#    if get_angle(l2) !=-45.0:
-#       #theta2.append(get_angle(l2))
-#       out2.append(l2)
+def get_intersect(m1,m2,b1,b2):
+    '''get intersection point (x,y) between two lines'''
+    x=(b2-b1)/(m1-m2)
+    y=m1*x+b1
+    return x,y
 
-#fig,(ax1,ax2)=plt.subplots(1,2,figsize=(5,6), sharex=True,sharey=True)
-#ax1.imshow(imraw, cmap=cm.gray)
-#ax2.imshow(imraw, cmap=cm.gray)
-#ax1.imshow(np.ma.masked_where(edges2 == 0,edges2),cmap=cm.cool,alpha=.7)
-#3ax2.imshow(np.ma.masked_where(edges2 == 0,edges2),cmap=cm.cool,alpha=.7)
 
-#for line in out1:
-#    p0, p1 = line
-#    ax1.plot((p0[0], p1[0]), (p0[1], p1[1]), color='r')
-#ax1.set_xlim((0, np.shape(imraw)[0]))
-#ax1.set_ylim((np.shape(imraw)[1], 0))
-#ax1.set_title('Probabilistic Hough')
 
-#ax1.set_axis_off()
-#ax1.set_adjustable('box-forced')
-#ax2.set_axis_off()
-#ax2.set_adjustable('box-forced')
-
-#fig.show()
