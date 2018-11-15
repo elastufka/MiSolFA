@@ -20,6 +20,7 @@ import time
 import glob
 import random
 import itertools
+import analyze_general as ag
 
 
 #list of dictionaries of the window numbers, pitches (mm), and nominal angles (deg)
@@ -41,25 +42,25 @@ EMwindows=[{'number':11,'pitch':89.6752,  'nominal angle':-44.79357,'phase':0.,'
                 {'number':34,'pitch':14.991, 'nominal angle': 44.96549,'phase':0.,'height':250,'slit_width':.5},
                 {'number':44,'pitch':15.009, 'nominal angle':-45.03455,'phase':0.,'height':250,'slit_width':.5}]
 
-EMwindowsr=[{'number':11,'pitch':90.326,  'nominal angle':-45.20793,'phase':0.,'height':250,'slit_width':.5},
-                {'number':21,'pitch':89.6752,  'nominal angle': 44.79357,'phase':0.,'height':250,'slit_width':.5},
-                {'number':12,'pitch':22.5203,'nominal angle': 45.05184,'phase':0.,'height':250,'slit_width':.5},
-                {'number':22,'pitch':22.4797,'nominal angle':-44.94825,'phase':0.,'height':250,'slit_width':.5},
-                {'number':31,'pitch':44.9187, 'nominal angle':-44.8966,'phase':0.,'height':250,'slit_width':.5},
-                {'number':41,'pitch':45.0814, 'nominal angle': 45.10378,'phase':0.,'height':250,'slit_width':.5},
-                {'number':32,'pitch':17.987, 'nominal angle': 44.95859,'phase':0.,'height':250,'slit_width':.5},
-                {'number':42,'pitch':18.013, 'nominal angle':-45.04146,'phase':0.,'height':250,'slit_width':.5},
-                {'number':33,'pitch':30.0362,  'nominal angle':-45.06914,'phase':0.,'height':250,'slit_width':.5},
-                {'number':43,'pitch':29.9639,  'nominal angle': 44.93102,'phase':0.,'height':250,'slit_width':.5},
-                {'number':34,'pitch':15.009, 'nominal angle': 45.03455,'phase':0.,'height':250,'slit_width':.5},
-                {'number':44,'pitch':14.991, 'nominal angle':-44.96549,'phase':0.,'height':250,'slit_width':.5}] #dectector side angle for ease, windows swapped...
+EMwindowsr=[{'number':11,'pitch':90.326,  'nominal angle':45.20793,'phase':0.,'height':250,'slit_width':.5},
+                {'number':21,'pitch':89.6752,  'nominal angle': -44.79357,'phase':0.,'height':250,'slit_width':.5},
+                {'number':12,'pitch':22.5203,'nominal angle': -45.05184,'phase':0.,'height':250,'slit_width':.5},
+                {'number':22,'pitch':22.4797,'nominal angle':44.94825,'phase':0.,'height':250,'slit_width':.5},
+                {'number':31,'pitch':44.9187, 'nominal angle':44.8966,'phase':0.,'height':250,'slit_width':.5},
+                {'number':41,'pitch':45.0814, 'nominal angle': -45.10378,'phase':0.,'height':250,'slit_width':.5},
+                {'number':32,'pitch':17.987, 'nominal angle': -44.95859,'phase':0.,'height':250,'slit_width':.5},
+                {'number':42,'pitch':18.013, 'nominal angle':45.04146,'phase':0.,'height':250,'slit_width':.5},
+                {'number':33,'pitch':30.0362,  'nominal angle':45.06914,'phase':0.,'height':250,'slit_width':.5},
+                {'number':43,'pitch':29.9639,  'nominal angle': -44.93102,'phase':0.,'height':250,'slit_width':.5},
+                {'number':34,'pitch':15.009, 'nominal angle': -45.03455,'phase':0.,'height':250,'slit_width':.5},
+                {'number':44,'pitch':14.991, 'nominal angle':44.96549,'phase':0.,'height':250,'slit_width':.5}] #dectector side angle for ease, windows swapped...
 
 QMwindows=[{'number':11,'pitch':89.6,  'nominal angle':-44.77,'phase':0.,'height':250,'slit_width':.5},
                 {'number':21,'pitch':90.3,  'nominal angle': 45.23,'phase':0.,'height':250,'slit_width':.5},
                 {'number':12,'pitch':44.9,'nominal angle': 44.90,'phase':0.,'height':250,'slit_width':.5},
                 {'number':22,'pitch':45.1,'nominal angle':-45.10,'phase':0.,'height':250,'slit_width':.5},
                 {'number':31,'pitch':30.0, 'nominal angle':-45.08,'phase':0.,'height':250,'slit_width':.5},
-                {'number':41,'pitch':30.01, 'nominal angle': 44.92,'phase':0.,'height':250,'slit_width':.5},
+                {'number':41,'pitch':30.1, 'nominal angle': 44.92,'phase':0.,'height':250,'slit_width':.5},
                 {'number':32,'pitch':22.5, 'nominal angle': 45.08,'phase':0.,'height':250,'slit_width':.5},
                 {'number':42,'pitch':22.5, 'nominal angle':-44.92,'phase':0.,'height':250,'slit_width':.5},
                 {'number':33,'pitch':18.0,  'nominal angle':-44.93,'phase':0.,'height':250,'slit_width':.5},
@@ -81,20 +82,28 @@ QMwindowsr=[{'number':11,'pitch':90.3,  'nominal angle':45.23,'phase':0.,'height
                 {'number':44,'pitch':15.0, 'nominal angle':44.94,'phase':0.,'height':250,'slit_width':.5}]
 class Grating():
 
-    def __init__(self,win,side=1,nominal_thickness=False,EM=True,source=False,analyze=False,data_path=False,calc_measured=False,rename=False,Apr=False,May=True, Sept=False):
+    def __init__(self,win,side=1.0,nominal_thickness=False,EM=True,source=False,analyze=False,data_path=False,calc_measured=False,rename=False,Apr=False,May=True, Sept=False):
         '''Construct the simulated grating'''
         self.size=[1.1,1.1] #cm
         if Apr:
             EM=True
             analyze='Xray'
             data_path='/Users/wheatley/Documents/Solar/MiSolFA/EMmodel/SLS_Apr2018'
+            opath='/Users/wheatley/Documents/Solar/MiSolFA/OpticalAnalysis/EMassembly_2017_11_15_FrontGrid'
+            #this is reversed! May is when we did the EM front grid. April was the rear grid.
+            #sort out later, the results are what's important for now
         if May:
             analyze='Xray'
             data_path='/Users/wheatley/Documents/Solar/MiSolFA/QMmodel/SLS_May2018'
+            if EM:
+                opath='/Users/wheatley/Documents/Solar/MiSolFA/OpticalAnalysis/mw469sub2765_2018_01_31'
+            else:
+                opath='/Users/wheatley/Documents/Solar/MiSolFA/OpticalAnalysis/mw501sub3437_2018_05_04'
         if Sept:
             EM=False
             analyze='Xray'
             data_path='/Users/wheatley/Documents/Solar/MiSolFA/QMmodel/SLS_Sept2018'
+            opath='/Users/wheatley/Documents/Solar/MiSolFA/OpticalAnalysis/mw561sub3501_2018_06_26'
         if EM:
             self.model='EM'
             fgparams=EMwindows
@@ -103,7 +112,7 @@ class Grating():
             self.model='QM'
             fgparams=QMwindows
             rgparams=QMwindowsr
-        if side==1:
+        if side==1.0:
             gparams=fgparams
             sidestr='front'
         else:
@@ -119,14 +128,12 @@ class Grating():
         self.data=Data(empty=True)
         if data_path:
             xpath=data_path
-            opath=data_path
+            #opath=data_path
         else:
             if EM:
                 xpath='EMmodel/'+sidestr
-                opath='EMmodel/'
             else:
                 xpath='QMmodel/'+sidestr
-                opath='QMmodel/'
         try:
             self.data.Xdata=XData(path=xpath,logfile=glob.glob(xpath+'/*.log')[0],imlist=glob.glob(xpath+'/'+str(win)+'*.tif')) #think more about how this should work later
         except IndexError: #it's transmission so there's one more layer of folders
@@ -173,72 +180,81 @@ class Grating():
             #print pdict
             return pdict
 
-        if self.data.type == 'optical':
-            opath=self.data.Odata.path
-            plist=glob.glob(opath+'/*.p')
-            self.data.Odata.edges==[im for im in plist if im.endswith('_edges.p')]
-            self.data.Odata.hough==[im for im in plist if im.endswith('_hough_ll*.p')]
-            self.data.Odata.cat_hough==[im for im in plist if im.endswith('_hough_all.p')]
-        elif self.data.type == 'Xray': #lamp or transmission?
-            xpath=self.data.Xdata.path
-            root,dirs,files=os.walk(xpath).next()
-            if dirs !=[]: #transmission. need to re-write imlist
-                for d in dirs:
-                    if d.endswith('_'):
-                        dirs.remove(d)
-                for d in dirs:
-                    if d.endswith('_'):
-                        dirs.remove(d)
-                moire_dirs=[d for d in dirs if d.startswith('moire')]
-                transm_dirs=[d for d in dirs if d.startswith('transm'+self.model) and not d.endswith('_')]
-                self.data.Xdata.logfile=transm_dirs[0]+'.log'
-                log_dir='log'
-                for mdir in moire_dirs:
-                    os.chdir(xpath+'/'+mdir)
-                    mimlist=glob.glob('win'+str(self.win)+'*.tif')
-                    os.chdir(xpath+'/../')
-                    self.data.Xdata.moire={'mdir':mdir,'imlist':mimlist}
-                for i,tdir in enumerate(transm_dirs): #group by level, type, position
-                    os.chdir(xpath+'/'+tdir)
-                    timlist=glob.glob('win'+str(self.win)+'*.tif')
-                    #print timlist
-                    oimlist=glob.glob('*window0'+str(self.win)+'*.tif')
+        #if self.data.type == 'optical':
+        win=self.win
+        opath=self.data.Odata.path
+        os.chdir(opath)
+        plist=glob.glob(opath+'/win'+str(win)+'*.p')
+        if self.model=='EM':
+            self.data.Odata.rawim=ag.EM_list(str(win),'5.0',ending='.tif')
+            self.data.Odata.edges=ag.EM_list(str(win),'5.0',ending='_edges.p')
+            self.data.Odata.cat_hough=ag.EM_list(str(win),'5.0',ending='_hough_all.p')
+        else:
+            self.data.Odata.rawim=glob.glob('win'+str(win)+'*_5.0X.tif')
+            self.data.Odata.edges=[im for im in plist if im.endswith('_edges.p')]
+            self.data.Odata.hough=[im for im in plist if im.endswith('_hough_ll*.p')]
+            self.data.Odata.cat_hough=[im for im in plist if im.endswith('_hough_all.p')]
 
-                    if oimlist != [] and rename: #rename images
-                        import analyze_xray as aXray
-                        onames,newnames=aXray.rename_files(self.win,oimlist,logfile=False)
-                    else:
-                        onames,newnames=oimlist,timlist
-                    if onames == [] and newnames ==[]: #there's nothing there. Don't make data dict
-                        continue
+        #elif self.data.type == 'Xray': #lamp or transmission?
+        xpath=self.data.Xdata.path
+        root,dirs,files=os.walk(xpath).next()
+        if dirs !=[]: #transmission. need to re-write imlist
+            for d in dirs:
+                if d.endswith('_'):
+                    dirs.remove(d)
+            for d in dirs:
+                if d.endswith('_'):
+                    dirs.remove(d)
+            moire_dirs=[d for d in dirs if d.startswith('moire')]
+            transm_dirs=[d for d in dirs if d.startswith('transm'+self.model) and not d.endswith('_')]
+            self.data.Xdata.logfile=transm_dirs[0]+'.log'
+            log_dir='log'
+            for mdir in moire_dirs:
+                os.chdir(xpath+'/'+mdir)
+                mimlist=glob.glob('win'+str(self.win)+'*.tif')
+                os.chdir(xpath+'/../')
+                self.data.Xdata.moire={'mdir':mdir,'imlist':mimlist}
+            for i,tdir in enumerate(transm_dirs): #group by level, type, position
+                os.chdir(xpath+'/'+tdir)
+                timlist=glob.glob('win'+str(self.win)+'*.tif')
+                #print timlist
+                oimlist=glob.glob('*window0'+str(self.win)+'*.tif')
 
-                    try:
-                        self.data.Xdata.transm[i]['folder']=tdir
-                    except IndexError:
-                        self.data.Xdata.transm.append({})
-                        self.data.Xdata.transm[i]['folder']=tdir
-                    self.data.Xdata.transm[i]['level00']=_sort_by_p([o for o in onames if o[-5].isdigit()]) #level 0
-                    if newnames !=[]:
-                        self.data.Xdata.transm[i]['level01']=_sort_by_p([o for o in newnames if o[-5].isdigit()]) #level 1 (renamed)
-                    test2=[o for o in newnames if o.endswith('_flatdark.tif')]
-                    if test2 !=[]:
-                        self.data.Xdata.transm[i]['level02']= _sort_by_p(test2) #level 2
-                    test3=[o for o in newnames if o.endswith('_corrected.tif')] #level 3
-                    if test3 !=[]:
-                       self.data.Xdata.transm[i]['level03']=_sort_by_p(test3)
-                    test4=[o for o in newnames if o.endswith('_groupstretch.tif')] #level 4
-                    if test4 !=[]:
-                        self.data.Xdata.transm[i]['level04']=_sort_by_p(test4)
-                    #has any higher-level processing been done? Check for edges, lines etc
-                    plist = glob.glob(xpath + '/'+tdir+'/win'+str(self.win)+'*.p')
-                    os.chdir('/../')
-                    test5=[o for o in plist if o.endswith('_edges.p')]
-                    if test5 !=[]:
-                        self.data.Xdata.transm[i]['level05']= _sort_by_p(test5)#level 5 - Canny edges
-                    test6=[o for o in plist if o.endswith('_hough.p')]
-                    print test6
-                    if test6 !=[]:
-                        self.data.Xdata.transm[i]['level06']= _sort_by_p(test6) #level 6
+                if oimlist != [] and rename: #rename images
+                    import analyze_xray as aXray
+                    onames,newnames=aXray.rename_files(self.win,oimlist,logfile=False)
+                else:
+                    onames,newnames=oimlist,timlist
+                if onames == [] and newnames ==[]: #there's nothing there. Don't make data dict
+                    continue
+
+                try:
+                    self.data.Xdata.transm[i]['folder']=tdir
+                except IndexError:
+                    self.data.Xdata.transm.append({})
+                    self.data.Xdata.transm[i]['folder']=tdir
+                self.data.Xdata.transm[i]['level00']=_sort_by_p([o for o in onames if o[-5].isdigit()]) #level 0
+                if newnames !=[]:
+                    self.data.Xdata.transm[i]['level01']=_sort_by_p([o for o in newnames if o[-5].isdigit()]) #level 1 (renamed)
+                test2=[o for o in newnames if o.endswith('_flatdark.tif')]
+                if test2 !=[]:
+                    self.data.Xdata.transm[i]['level02']= _sort_by_p(test2) #level 2
+                test3=[o for o in newnames if o.endswith('_corrected.tif')] #level 3
+                if test3 !=[]:
+                   self.data.Xdata.transm[i]['level03']=_sort_by_p(test3)
+                test4=[o for o in newnames if o.endswith('_groupstretch.tif')] #level 4
+                if test4 !=[]:
+                    self.data.Xdata.transm[i]['level04']=_sort_by_p(test4)
+                #has any higher-level processing been done? Check for edges, lines etc
+                plist = glob.glob(xpath + '/'+tdir+'/win'+str(self.win)+'*.p')
+                os.chdir('/../')
+                test5=[o for o in plist if o.endswith('_edges.p')]
+                if test5 !=[]:
+                    self.data.Xdata.transm[i]['level05']= _sort_by_p(test5)#level 5 - Canny edges
+                test6=[o for o in plist if o.endswith('_hough.p')]
+                print test6
+                if test6 !=[]:
+                    self.data.Xdata.transm[i]['level06']= _sort_by_p(test6) #level 6
 
     def flag_data(self,p=True,p0ang=False):
         '''In case of a bad sequence or frame, flag data so that it will not be processed but replaced with a constant value or nan instead depending on method...For now, always flag indivdual values before sequences or else it might get appended to the data lists for some reason'''
@@ -265,12 +281,21 @@ class Grating():
                         except KeyError:
                             self.data.Xdata.transm[i][k]['flagged']=['win'+str(self.win)+'_'+p0ang+suffix]
 
+    def trim_optical_edges(self, maxx='10',maxy='13',lpix=50,rpix=50,tpix=50,bpix=50):
+        ''' trim edges off of the microscope images '''
+        os.chdir(self.data.Odata.path)
+        imdata=self.data.Odata.rawim #list of images
+        for filen in imdata:
+            ag.remove_edges(filen,ag.im2ndarray(filen),maxx=maxx,maxy=maxy,lpix=lpix,rpix=rpix,tpix=tpix,bpix=bpix)
 
-    def parameterize_optical(self):
+    def parameterize_optical(self,ll=[50,100,150,200,250],coverwrite=False,hoverwrite=False,tol=9,plot=True,stats=True,htol=5,ftags='a',pix2um=1.955,mask45=False,sigma=2.,r_or_f_tol=3,filter_nominal=False):
         '''Reduce data from optical measurements to set of parameters and error: period, orientation,phase,errors'''
-        self.measured='foo'
+        import analyze_optical as ao
+        os.chdir(self.data.Odata.path)
+        self.results['optical']=ao.analyze_optical(self, ll=ll,coverwrite=coverwrite,hoverwrite=hoverwrite,tol=tol,plot=plot,sigma=sigma,mask45=mask45,r_or_f_tol=r_or_f_tol,stats=plot,htol=htol,ftags=ftags,filter_nominal=filter_nominal)
+        self.results['optical'].nominal=self.nominal
 
-    def parameterize_transmission(self, method='sum',mkwargs=False,plot=True):
+    def parameterize_transmission(self, method='sum',mkwargs=False,plot=True,sigma=False,tolvec=False):
         '''Reduce data from transmission measurements to set of parameters and error: period, orientation,height, transmission, errors'''
         import analyze_xray as aXray
         #mkwargs are the kwargs associated with the method
@@ -283,13 +308,16 @@ class Grating():
             if 'level01' not in self.data.Xdata.transm[j].keys():
                 continue
             if not mkwargs:
-                updates,results = aXray.analyze_window(self.win,self.model,self.data.Xdata.transm[j],method)
+                updates,results = aXray.analyze_window(self.win,self.model,self.data.Xdata.transm[j],method,sigma=sigma,tolvec=tolvec)
+                #print 'here'
             else:
                 updates,results = aXray.analyze_window(self.win,self.model,self.data.Xdata.transm[j],method,**mkwargs) #updates need to be written to transm
             if len(updates) !=0:
                 for i in range(0,len(updates)):
                     self.data.Xdata.transm[j][updates[i]['key']]=updates[i]['data'] #not right yet
+            print j
         self.results[method]=results
+        self.results[method].nominal=self.nominal
         if plot:
             if method == 'widths':
                 yran=[.1,.6]
@@ -307,13 +335,37 @@ class Grating():
 #         self.measured='foo'
 
 #     def calc_moire_nominal(self,imsize=False):
-#         '''Calcualte nominal moire period and orientation. If requested, also an image (this goes in Subcollimator, not Grating)'''
+#         '''Calculate nominal moire period and orientation. If requested, also an image (this goes in Subcollimator, not Grating)'''
 #         import plot_divergent as pd
 #         fp=
 #         rp=
 #         fa=
 #         ra=
 #         self.nominal.moire['period'],self.nominal.moire['orientation'] = pd.calc_moire_period(fp,rp,fa,ra,eff=False,quiet=True):
+
+#     def calc_transm_2D_nominal(self, ret=False):
+#         '''Calculate and return dictionary of binary 2D array describing the transmission images, given the nominal parameters'''
+#         #for each image used to calculate the 'widths' method, find the first edge
+
+
+#         #for each image, find the number of horizontal gaps (and their size?)
+
+#         #
+#         if ret:
+#             return dict2d
+
+    def transm_func(xnew,w0,h,dc,yoff): #can I fit the duty cycle too?
+        return yoff+(w0-np.abs(h*np.tan(np.deg2rad((xnew-pkth)))))/(w0/dc)
+
+
+    def calc_nominal_transm(self, th_vec=False,th_offsets=False):
+        '''calculate the transmission profile given ideal conditions'''
+        if "transm_prof" not in self.nominal.__dict__.keys():
+            self.nominal.transm_prof = {}
+        #if not th_vec: #get from a file
+        for p in range(0,7):
+            yvals=transm_func(th_vec,self.nominal['pitch']/self.nominal['slit_width'],self.nominal['height'],self.nominal['slit_width'],0.) #no y-offset
+            self.nominal.transm_prof['p'+str(pindex)]=yvals
 
     def calc_3D_nominal(self):
         '''Calculate and return binary 3D array describing the grating, given the nominal parameters'''
@@ -502,6 +554,7 @@ def calc_3D_grating_error(param_dict,error_params):
 class XData():
     def __init__(self, path='.', logfile=False, imlist=False):
         '''Empty object for storing X-ray data in Grating()'''
+        #self.type='Xray'
         self.path=path
         self.logfile=logfile
         self.imlist=imlist
@@ -516,6 +569,9 @@ class OData():
         self.imlist=imlist
         self.edges=[]
         self.hough=[]
+        self.cat_hough=[]
+        self.rawim=[]
+        #self.type='Optical'
 
 class Data():
     def __init__(self,empty=True):

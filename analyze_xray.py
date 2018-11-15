@@ -24,7 +24,7 @@ import glob
 import analyze_general as ag
 import results
 
-def analyze_window(win,model,data_dict, method,**kwargs):
+def analyze_window(win,model,data_dict, method,tolvec=False,sigma=False):
     '''Run the whole analysis for a window. Return a Results object'''
     #prep: check for processing level of the files. should be at least level 1 (renamed)
     updates=[]
@@ -89,18 +89,44 @@ def analyze_window(win,model,data_dict, method,**kwargs):
         res=results.Results(win,'transm','binary',False,{'xdata':xv,'ydata':sv})
     elif method == 'widths':
         #run batch_window
-        xvec,sumvecp,sumveca,sumpp,sumpa=calc_widths_allP(win,data_dict['level03'])
+        if tolvec and sigma:
+            xvec,sumvecp,sumveca,sumpp,sumpa=calc_widths_allP(win,data_dict['level03'],tolvec=tolvec,sigma=sigma)
+        else:
+            xvec,sumvecp,sumveca,sumpp,sumpa=calc_widths_allP(win,data_dict['level03'])
+
         meanvecp,meanpp=[],[]
+        maskvecp,maskpp=False,False
+        try:
+            flags=data_dict['level03']['flagged']
+            maskvecp,maskpp=[],[]
+
+        except KeyError:
+            flags=[]
         for p in range(0,7):
             meanvecp.append([np.mean(sumvecp[i,p]) for i in range(0,len(xvec))])
             meanpp.append([np.mean(sumpp[i,p]) for i in range(0,len(xvec))])
-        meanvecp=np.array(meanvecp)
+            #build masks too
+            if flags !=[]:
+                lvecp,lpp=[],[]
+                fullimnames=['win'+str(win)+'_p'+str(p)+'_'+str('{:g}'.format(x))+'_corrected.tif' for x in xvec]
+                for im in fullimnames:
+                    if im in flags:
+                        lvecp.append(True)
+                        lpp.append(True)
+                    else:
+                        lvecp.append(False)
+                        lpp.append(False)
+                maskvecp.append(lvecp)
+                maskpp.append(lpp)
+
+
+        meanvecp=np.ma.array(meanvecp,mask=maskvecp)
         meanveca=np.transpose(meanvecp)#np.mean(sumveca,axis=1)
         #meanpp=np.array([[np.mean(svp) for svp in sumvp] for sumvp in sumpp])
         #for a in range(0,len(xvec)):
         #    meanpp.append([np.mean(sumpp[i,a]) for i in range(0,7)])
 
-        meanpp=np.array(meanpp)
+        meanpp=np.ma.array(meanpp,mask=maskpp)
         meanpa=np.transpose(meanpp)#np.mean(sumveca,axis=1)
         ydata=meanvecp/meanpp #duty cycle, grouped by p
         ydataa=meanveca/meanpa #duty cycle, grouped by angle
@@ -108,13 +134,15 @@ def analyze_window(win,model,data_dict, method,**kwargs):
                                                      'raw_widths_P':sumvecp,'raw_widths_A':sumveca, \
                                                     'raw_periods_P':sumpp,'raw_periods_A':sumpa, \
                                                     'mean_widths_P':meanvecp,'mean_widths_A':meanveca, \
-                                                    'mean_periods_P':meanpp,'mean_periods_A':meanpa})
+                                                    'mean_periods_P':meanpp,'mean_periods_A':meanpa},params={'tolvec':tolvec, 'sigma':sigma})
 
     return updates,res
 
-def calc_widths_allP(win,data_dict,tolvec=False,nvec=False):
-    widths,allwidths,allperiods=[],[],[]
+def calc_widths_allP(win,data_dict,tolvec=False,sigma=False):
+    '''should I deal with flagged data here? send the arrays back as masked arrays? '''
+    widths,allwidths,allperiods,check=[],[],[],[]
     files=data_dict['p0']
+    #flags=data_dict['flagged']
     xvec=[float(im[im.find("_")+4:-14]) for im in files]
     xvec.sort()
     xvecstr=[str(xv) for xv in xvec]
@@ -122,31 +150,61 @@ def calc_widths_allP(win,data_dict,tolvec=False,nvec=False):
         if xv.endswith('.0'):
             xvecstr[k]=xv[:-2]
     #allwidthsp,allwidthsa=[],[]
-    print xvecstr
+    #print xvecstr
     for i,p in enumerate(range(0,7)):
         for j,ang in enumerate(xvecstr):
             fnames=data_dict['p'+str(p)]
             im=[fn for fn in fnames if fn=='win'+str(win)+'_p'+str(p)+'_'+ang+'_corrected.tif'][0]
             if tolvec:
-                tol=tol[j]
+                tol=tolvec[j]
             else:
-                tol=False
-            if nvec:
-                n=nvec[j]
-            else:
-                n=5
-            print im
-            pp,ww=ag.slit_widths_from_peaks(win,im,plot=False,tolerance=tol,n=n)
+                tol=6
+            #print im
+            pp,ww,ck=ag.slit_widths_from_peaks(win,im,plot=False,tolerance=sigma,n=tol) #do even if flagged
+            if ck: #and im not in flags:
+                check.append(im)
+            #if im in flags: #mask?
+            #    mask.append() # empty array of same shape?
             allwidths.append(np.array(ww))
             allperiods.append(np.array(pp))
-    print np.shape(allwidths),np.shape(allperiods)
+    #print np.shape(allwidths),np.shape(allperiods)
     #sort into grouped by P and grouped by angle
     #allwidthsp=allwidths
     allwidthsp=[allwidths[i::len(xvec)] for i in range (0,len(xvec))]#[allwidths[i::7] for i in range(0,7)]
     allwidthsa=[allwidths[i::7] for i in range (0,7)]
     allperiodsp=[allperiods[i::len(xvec)] for i in range (0,len(xvec))]
     allperiodsa=[allperiods[i::7] for i in range (0,7)]
+    print "Check these images: "
+    print check
     return xvec,np.array(allwidthsp),np.array(allwidthsa),np.array(allperiodsp),np.array(allperiodsa)#,errvec
+
+def check_single_image(imname,tolerance=False,sigma=2.):
+    win=int(imname[3:5])
+    p0=int(imname[7])
+    ang=imname[9:-14]
+    print win,p0,ang
+    edges=pickle.load(open(imname[:-4]+'_edges.p','rb'))
+    ce=ag.clean_centers(edges,plot=False,sigma=sigma)
+    ag.plot_centers_and_edges(win,p0,ang,tol=sigma)
+    recalc =True
+    while recalc: #do center cleaning and slit or slat again
+        tol=int(raw_input('Tolarance? (int) '))
+        sig=float(raw_input('Sigma? (float) '))
+        ce=ag.clean_centers(edges,plot=False,sigma=sig)
+        xp=ag.sum_peaks(ce,tol=tol)
+        pp,ww,ck=ag.slit_widths_from_peaks(win, imname, xpeak=xp,plot=True, tolerance=sig,n=tol,quiet=False)
+        ag.plot_centers_and_edges(win,p0,ang,tol=sig)
+        pp.sort()
+        ww.sort()
+        print "10 smallest periods: ", pp[:10]
+        print "10 largest periods: ", pp[-10:]
+        print "10 smallest widths: ", ww[:10]
+        print "10 largest widths: ", ww[-10:]
+        rc =(raw_input('Recalculate?'))
+        if rc == 1 or rc == 'True' or rc == 'true' or rc == 'Y':
+            recalc=True
+        else:
+            recalc=False
 
 def rename_files(win,flist,logfile=False):
     '''rename from default TOMCAT names to something more precise'''

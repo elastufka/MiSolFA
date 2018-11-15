@@ -32,23 +32,32 @@ def im2ndarray(filen):
     im=np.array(imraw)
     return im
 
-def remove_edges(filen,im,maxx='10',maxy='13'):
+def remove_edges(filen,im,maxx='10',maxy='13',lpix=50,rpix=50,tpix=50,bpix=50,write=True):
     '''remove edges from images with edges of the window in them'''
     if filen.endswith('.p') or filen.endswith('mosaic.tiff'):
         imshape=np.shape(im)
         im=im[50:imshape[0]-50,50:imshape[1]-50]
         return im
     else:
+        cropped=False
         windex,imindex=get_index(filen)
-        if imindex[0] == '01': #it's got an edge on the left, trim the array (x and y are flipped for some reason)
-            im=im[:,50:]
-        if imindex[0] == maxx: #it's got an edge on the right, trim the array
-            im=im[:,:-50]
-        if imindex[1] == '01': #it's got an edge on the top, so mask the edges
-            im=im[50:,:]
-        if imindex[1] == maxy: #it's got an edge on the bottom, so mask the edges
-            im=im[:-50,:]
+        if imindex[0] == '01' and lpix != False: #it's got an edge on the left, trim the array (x and y are flipped for some reason)
+            im=im[:,lpix:]
+            cropped=True
+        if imindex[0] == maxx and rpix != False: #it's got an edge on the right, trim the array
+            im=im[:,:-rpix]
+            cropped=True
+        if imindex[1] == '01' and tpix != False: #it's got an edge on the top, so mask the edges
+            im=im[tpix:,:]
+            cropped=True
+        if imindex[1] == maxy and bpix != False: #it's got an edge on the bottom, so mask the edges
+            im=im[:bpix,:]
+            cropped=True
         #print np.shape(im)
+    if write and cropped:
+        os.rename(filen,filen[:-4]+'_uncropped.tif') #first rename old file
+        marray=Image.fromarray(im) #raw, unequalised array
+        marray.save(filen)
     return im
 
 def make_flat(flatdir, nflats=100,saveim=False):
@@ -99,12 +108,14 @@ def contrast_stretch(imf,saveim=True):
         savec.save(imname)
     return imname
 
-def correct_image(im,dark,flat,saveim=False, pickleimarr=False, contrast_stretch=False,show=False):
+def correct_image(im,dark,flat,fac=False,saveim=False, pickleimarr=False, contrast_stretch=False,show=False,ret=False):
     if type(im) == str:
         im=im2ndarray(im)
     imc=im-dark
     flatc=flat-dark
-    corrected_image=imc/flatc
+    if not fac:
+        fac=1.0
+    corrected_image=imc/(flatc*fac)
     if contrast_stretch:
         #contrast stretching
         p2 = np.percentile(corrected_image, 2)
@@ -122,8 +133,81 @@ def correct_image(im,dark,flat,saveim=False, pickleimarr=False, contrast_stretch
         savec.save(saveim)
     if pickleimarr:
         pickle.dump(corrected_image,open(pickleimarr,'wb'))
+    if ret:
+        return corrected_image
 
-    #return corrected_image
+def check_correction():
+    ''' check that the correction works for all the datasets'''
+    from skimage import exposure
+    dirs=['EMmodel/SLS_Apr2018','QMmodel/SLS_May2018','QMmodel/SLS_Sept2018']
+    #labs=['','',']
+    fig,ax=plt.subplots(3,4,figsize=[15,10])
+    for d,a in zip(dirs,ax):
+        os.chdir(d)
+        flat=pickle.load(open('transm'+d[:2]+'_combined_flat.p','rb'))
+        dark=pickle.load(open('transm'+d[:2]+'_combined_dark.p','rb'))
+        if d =='QMmodel/SLS_Sept2018':
+            flat =pickle.load(open('transmQM_flat_post.p','rb'))
+        dfile=glob.glob('transm'+d[:2]+'/win*_p3_0.tif')[0]
+        testim=im2ndarray(dfile)
+        print dfile
+        a[0].imshow(testim,origin='bottom left')
+        thist,tbc=exposure.histogram(testim-dark,nbins=256)
+        fhist,fbc=exposure.histogram(flat-dark,nbins=256)
+        tbinmax=tbc[np.where(thist == np.max(thist[70:]))[0]]
+        fbinmax=fbc[np.where(fhist == np.max(fhist[70:]))[0]]
+        fac=1.0#tbinmax/fbinmax
+        print fac
+        #thistr=np.reshape(thist, 2048)
+        #tbcr=np.reshape(tbc,2040)
+        #print np.shape(thistr),np.shape(tbcr),np.shape(testim)
+        #a[0].plot(tbcr,thistr,lw=2)
+        a[0].set_title(d[8:]+' original')
+        cim=correct_image(testim,dark,flat,fac=fac,ret=True,saveim='testim.tif')
+        a[1].imshow(cim,origin='bottom left')#,norm=matplotlib.colors.Normalize(vmin=.9*np.min(cim),vmax=1.1*np.max(cim)))
+        chist,cbc=exposure.histogram(cim*256.,nbins=256)
+        #print np.shape(chist),np.shape(cbc)
+        #a[1].plot(cbc,chist,lw=2)
+        a[1].set_title(d[8:]+' corrected')
+        a[2].imshow(flat-dark,origin='bottom left')
+        print np.shape(tbc),np.shape(fbc)
+        #a[2].plot(fbc,fhist,lw=2)
+        a[2].set_title(d[8:]+' flat-dark')
+        #hist, bins_center = exposure.histogram(camera)
+        #plt.plot(bins_center, hist, lw=2)
+        a[3].plot(range(0,256),thist,'r',label='original')
+        a[3].plot(range(0,256),chist,'b',label='corrected')
+        a[3].plot(range(0,256),fhist,'g',label='flat-dark')
+        a[3].legend(loc='upper right')
+
+        for aa in a:
+            aa.axis('off')
+        os.chdir('../../')
+    fig.show()
+
+def show_method():
+    fig,ax=plt.subplots(1,4,figsize=[12,5])
+    fd=im2ndarray('win11_p3_0_flatdark.tif')
+    corr=im2ndarray('win11_p3_0_corrected.tif')
+    gs=im2ndarray('win11_p3_0_groupstretch.tif')
+    bmean=np.mean(fd)
+    imgt=np.ma.masked_greater(fd,bmean) #what happens if the value equals the mean?
+    imgtfilled=np.ma.filled(imgt, 1.0)
+    imlt=np.ma.masked_less(imgtfilled,bmean)
+    imltfilled=np.ma.filled(imlt, 0.0)
+    imarr=imltfilled
+
+    ax[1].imshow(imarr,origin='lower left')
+    ax[1].set_title('binary')
+    ax[0].imshow(fd,origin='lower left')
+    ax[0].set_title('corrected')
+    ax[2].imshow(gs,origin='lower left')
+    ax[2].set_title('group stretched')
+    ax[3].imshow(corr,origin='lower left')
+    ax[3].set_title('contrast stretched')
+    for a in ax:
+        a.axis('off')
+    fig.show()
 
 def contrast_stretch_group(imlist,cropim=False,saveim=False):
     '''contrast stretch by position group - take the absolute minimum 2% of all images in group, max 98%. input is list of flatdark corrected images'''
@@ -194,6 +278,26 @@ def groupstretch(imlist):
     for pimlist in pgroups:
         newimnames.extend(contrast_stretch_group(pimlist,saveim=True))
     return newimnames
+
+def EM_list(win,mag,ending='.tif'):
+    import glob
+    filen=glob.glob('win'+win+'*_'+mag+'X'+ending)
+    newfilen=[]
+    for f in filen:
+        if '01' not in f and '12' not in f[6:] and '09' not in f:
+            newfilen.append(f)
+    return newfilen
+
+def get_index(filen):
+    '''Parse filename to get indices of image in window as well as overall window index. This helps determine whether or not it includes the edge of the window.'''
+    if len(filen) > 50: #it's the whole thing
+        filen=filen[filen.find('win')-1:]
+    windex=filen[filen.find('win')+3:filen.find('_')]
+    indices=filen[filen.find('_')+1:filen.rfind('5.0')-1]
+    if indices.endswith('_'):
+        indices= indices[:-1]
+    index=[indices[:2],indices[3:]]
+    return windex,index
 
 #################################################################################################################
 
@@ -407,47 +511,79 @@ def Canny_edge(filen,sigma=3,mag=5.0,anisotropic=False,binary=False,gauss=False,
     pickle.dump(edges,open(newfilen,'wb'))
     return edges,newfilen
 
-def clean_centers(edges,tolerance=False,plot=False,sigma=2.):
+def clean_centers(edges,cfac=False,tolerance=False,plot=False,sigma=2.):
     '''clean out the Canny edge array so that pixel bins with low counts (ie probably bad edges) get deleted below a certain threshold'''
     esum=np.sum(edges,axis=0)
     cleaned_edges=np.copy(edges)
+    #print sigma,np.std(esum)
     if not tolerance:
         tolerance=np.mean(esum)+sigma*np.std(esum)
     #print tolerance
-    for i,col in enumerate(esum):
-        if col < tolerance and col != 0:
-            #print i, col
-            cleaned_edges[:,i] = False
+    if type(cfac) !=bool:
+        tolvec = sigma*np.std(esum)*cfac/np.max(cfac) #numpy 1-D array
+        for i,col in enumerate(esum):
+            if col < tolvec[i] and col != 0:
+                #print i, col
+                cleaned_edges[:,i] = False
+    else:
+        for i,col in enumerate(esum):
+            if col < tolerance and col != 0:
+                #print i, col
+                cleaned_edges[:,i] = False
     if plot:
         cleaned_sum=np.sum(cleaned_edges,axis=0)
         fig,ax=plt.subplots()
         ax.plot(range(0,len(esum)),esum, label='original')
         ax.plot(range(0,len(cleaned_sum)),cleaned_sum,label='cleaned')
-        ax.axhline(tolerance,c='k',linestyle='--')
+        if type(cfac) != bool:
+            ax.plot(range(0,len(tolvec)),tolvec,label='tolerance')
+        else:
+            ax.axhline(tolerance,c='k',linestyle='--')
         ax.legend(loc='upper right')
-        ax.set_xlim([0,2040])
+        ax.set_xlim([0,len(cfac)])
         fig.show()
     return cleaned_edges
 
-def plot_centers_and_edges(edges,cleaned_edges, datafile):
+def plot_centers_and_edges(win,p0,ang,earr=False, datafile=False,tol=2.0,cfac=False):
+    fname='win'+str(win)+'_p'+str(p0)+'_'+ang+'_corrected_edges.p'
+    if not datafile:
+        datafile='win'+str(win)+'_width_data_p'+str(p0)+'_'+ang+'.p'
     dd=pickle.load(open(datafile,'rb'))
+    if 'earr' in dd.keys():
+        edges=dd['earr']
+        carray=rotate(np.transpose(np.ones(dd['imshape'])),dd['rang'], reshape=True)
+        cfac=np.sum(carray,axis=0)
+    elif type(earr) == bool:
+        edges=pickle.load(open(fname,'rb'))
+    else:
+        edges=earr
+    cleaned_edges=clean_centers(edges,sigma=tol,cfac=cfac)
     esum=np.sum(edges,axis=0)
-    tolerance=np.mean(esum)+2.*np.std(esum)
+    tolerance=np.mean(esum)+tol*np.std(esum)
+    if type(cfac) !=bool:
+        tolvec = tol*np.std(esum)*cfac/np.max(cfac) #numpy 1-D array
+
     cleaned_sum=np.sum(cleaned_edges,axis=0)
     rising=dd['rising']
     falling=dd['falling']
 
     fig,ax=plt.subplots()
-    ax.plot(range(0,len(esum)),esum, label='original')
-    ax.plot(range(0,len(cleaned_sum)),cleaned_sum,label='cleaned')
-    ax.axhline(tolerance,c='k',linestyle='--')
-    ax.scatter(rising,tolerance*np.ones(len(rising)),c='r',marker='v',label='rising')
-    ax.scatter(falling,tolerance*np.ones(len(rising)),c='k',marker='o',label='falling')
+    ax.step(range(0,len(esum)),esum, linewidth=1,label='original',c='m')
+    ax.step(range(0,len(cleaned_sum)),cleaned_sum,linewidth=2,label='cleaned',c='g')
+    if type(cfac) != bool:
+        ax.plot(range(0,len(tolvec)),tolvec,label='tolerance')
+        ax.scatter(rising,tolerance*np.ones(len(rising)),c='r',marker='v',s=60,label='rising')
+        ax.scatter(falling,tolerance*np.ones(len(falling)),c='k',marker='o',s=50,label='falling')
+    else:
+        ax.axhline(tolerance,c='k',linestyle='--')
+        ax.scatter(rising,tolerance*np.ones(len(rising)),c='r',marker='v',s=60,label='rising')
+        ax.scatter(falling,tolerance*np.ones(len(falling)),c='k',marker='o',s=50,label='falling')
     ax.legend(loc='upper right')
-    ax.set_xlim([0,2040])
+    ax.set_xlim([0,len(cleaned_sum)])
+    ax.set_ylim([0,np.max(esum)])
     fig.show()
 
-def sum_peaks(cleaned_edges, tol=2,irange=False):#irange=[1087,1105]):
+def sum_peaks(cleaned_edges, tol=9,irange=False):#irange=[1087,1105]):
     '''Get the locations of the peaks of a (Gaussian?) fit to the histogram of sums, return these as the width array. Tolerance is number of False allowed between Trues to still be considered a group'''
     esum=np.sum(cleaned_edges,axis=0)
     if irange:
@@ -456,29 +592,31 @@ def sum_peaks(cleaned_edges, tol=2,irange=False):#irange=[1087,1105]):
     #first get the groups of True values
     group=False
     for i,es in enumerate(esum[:-1]):
-        if irange:
-            print i+irange[0],es,group
-        if es != 0.0 and not group:
+        #if irange:
+            #print i+irange[0],es,group,group_hist,group_xvec
+        if es != 0.0 and not group: #start the group for the first non-zero value
             lhist=[es]
             lxvec=[i]
             group=True
-        elif es !=0.0 and group:
+        elif es !=0.0 and group: #if aready in group, stay in group unless following tol pixels are all zeros
             lhist.append(es)
             lxvec.append(i)
             #print 'here',esum[i+1]
-            if np.mean(esum[i+1:i+tol]) == 0 :
+            #if np.mean(esum[i+1:i+tol]) == 0 :
                 #print 'here'
-                group=False
+            #    group=False
+        elif es == 0.0 and group and i-lxvec[0]<tol and np.mean(esum[i:i+tol]) !=0.0: #if there is a zero but it's inside a group, keep it
+            lhist.append(es)
+            lxvec.append(i)
         else:
             group=False
         if not group:
             try:
-                if lhist not in group_hist:
+                if lxvec not in group_xvec:
                     group_hist.append(lhist)
                     group_xvec.append(lxvec)
             except NameError:
                 continue
-    #now build little histograms out of the groups and fit gaussians to them. return the new x-vector (float!) of peak locations
     #this actually doesn't work well because there are so few points they don't make a normal distribution! So let's take the weighted average instead
     xpeak=[]
     #print group_xvec,group_hist
@@ -488,8 +626,10 @@ def sum_peaks(cleaned_edges, tol=2,irange=False):#irange=[1087,1105]):
         #    xpeak.append(gauss_peak(xg,yg))
         #else:
         #    xpeak.append(np.mean(xg))
+    #if irange:
+    #    print xpeak
 
-    return xpeak
+    return xpeak#,group_xvec,group_hist
 
 def gauss_peak(xdata,ydata,npts=50,show=False,ret_data=False):
     ''' returns peak of gaussian fit to data'''
@@ -525,16 +665,71 @@ def gauss_peak(xdata,ydata,npts=50,show=False,ret_data=False):
     else:
         return xpeak #,ypeak
 
-def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,stats=True,gauss=False,tolerance=False,n=5):
+def get_im_rot_angle(edges,testrot=True):
+    '''calculate the angle of rotation of the image by comparing the first and last row of cleaned edges'''
+    row1=edges[5]
+    row2=edges[-5]
+    aa=np.where(row1 == True)
+    bb=np.where(row2==True)
+    offset=[]
+    for a in aa[0]:
+       idx=np.abs(bb[0]-a).argmin()
+       offset.append(bb[0][idx]-a)
+    print np.mean(offset)
+    print np.median(offset)
+    print np.std(offset)
+    print offset
+    #image height is 2038 (counting where the pixels are taken from)
+    theta=np.arctan2(np.std(offset),2038.)
+    print np.rad2deg(theta)
+
+    if testrot: #rotate the edge array and see what happens to the offset
+        rotedges=imrotate(edges,-1*np.rad2deg(theta))
+        fig,ax=plt.subplots()
+        ax.imshow(rotedges,origin='lower left')
+        fig.show()
+        #convert array to bool
+        row1=rotedges[5]
+        row2=rotedges[-5]
+        r1mean=np.mean(row1)
+        r2mean=np.mean(row2)
+        row1a=[i for i,r in enumerate(row1) if r >=r1mean]
+        row2a=[i for i,r in enumerate(row2) if r >=r2mean]
+        aa=np.array(row1a)#np.where(row1b == True)
+        bb=np.array(row2a)#np.where(row2b==True)
+        offset=[]
+        for a in aa:
+           idx=np.abs(bb-a).argmin()
+           offset.append(bb[idx]-a)
+        print np.mean(offset)
+        print np.median(offset)
+        print np.std(offset)
+        print offset
+        #image height is 2038 (counting where the pixels are taken from)
+        theta=np.arctan2(np.median(offset),2038.)
+        print np.rad2deg(theta)
+        fig,ax=plt.subplots()
+        ax.step(range(0,2040),np.sum(edges,axis=0),label='original')
+        ax.step(range(0,2040),np.sum(rotedges,axis=0)/256.,label='rotated')
+        ax.legend(loc='upper right')
+        fig.show()
+        return aa,bb,rotedges
+
+
+def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,stats=True,gauss=False,tolerance=False,n=9,quiet=True):
     '''basically same as slit_or_slat() plus histogramming'''
     #if not ang:
+    check=False
     p0ang=imfile[6:imfile.rfind('_')]
     #else:
     #    p0ang=ang
     im=np.array(Image.open(imfile))
     imsum=np.sum(im,axis=0)
     immean=np.mean(imsum)
-
+    imgrad=np.gradient(imsum)
+    #imgrad2=np.gradient(imgrad)
+    #gradpeaks=(np.roll(np.sign(imgrad2),1)-np.sign(imgrad2) !=0).astype(int) #locations where the gradients peak
+    #gx=np.where(gradpeaks !=0)[0]
     if not xpeak:
         efile=glob.glob(imfile[:-4]+'_edges.p')
         if len(efile) > 0:
@@ -547,35 +742,23 @@ def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,s
     xpeak_int=[int(x) for x in xpeak]
     xpeak_int.sort()
 
+#     #insert dummy peaks based on gx. EXCLUDE these from the rising/falling analysis
+#     #check for values in gx that are within 2 pixels of xpeak_int
+#     xpeak_arr=np.array(xpeak_int)
+#     mask,allpeaks=[],[]
+#     for gxv in gx:
+#         absdiff=np.abs(xpeak_arr -gxv)
+#         nearest_xpeak=xpeak_int[absdiff.argmin()]
+#         if absdiff.min() >n and gxv not in allpeaks:     #for those without a corresponding xpeak, insert a 'dummy' peak into the list...with a corresponding mask so we know it's a dummy
+#             allpeaks.append(gxv)
+#             mask.append(False)
+#         elif nearest_xpeak not in allpeaks:
+#             allpeaks.append(nearest_xpeak)
+#             mask.append(True)
+
     #determine if edges are rising or falling
-    rising=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imsum[xpeak_int[i]:xpeak_int[i+1]]) > immean] #need xpeaks to be integers now
-    falling=[xpeak[i+1] for i in range(0,len(xpeak)-1) if np.mean(imsum[xpeak_int[i]:xpeak_int[i+1]]) > immean]
 
-    if falling[0] > rising[0]:
-        width=[f-r for r,f in zip(rising,falling)]#falling-rising
-    else: #first one is falling
-        width=[f-r for r,f in zip(rising,falling[1:])]
-
-    periodr= [rising[i+1] - rising[i] for i in range(0,len(rising)-1)]#rising-rising
-    periodf=[falling[i+1] - falling[i] for i in range(0,len(falling)-1)]#falling - falling
-    period=periodr#np.mean(periodr+periodf)
-    period.extend(periodf)
-
-#     if width != []:
-#         width=filter(lambda a:a > n,width) #filter out all the 0- n px separations
-#         median=np.median(width) #assume it gets it right more often than not. might not be the case for the finer grids...
-#         #print median
-#         period=[]
-#         for i in range(0,len(width)-1):
-#             #which is smaller, width % median, width % n*median?
-#             factor=float(int(width[i])/int(median))
-#             if factor == 0:
-#                 factor = 1.
-#             #print width[i],factor
-#             period.append(width[i]/factor)
-#         period=np.array(period)*pix2um # need to account for the fact that it's rotated! width is not true width!
-#     else:
-#         period =[]
+    rising, falling, periodr,periodf,periods=rising_or_falling_final(xpeak,xpeak_int,imgrad,n=n)
     if plot:
         #make the histogram
         fig,ax=plt.subplots()
@@ -592,6 +775,8 @@ def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,s
         avg=np.mean(period) #here period is slit width ...what if I want to plot the actual period?
         med=np.median(period)
         stdv=np.std(period)
+        if stdv >=1.:
+            check=True
         statfile='win'+str(window_num)+'_width_stats_'+p0ang+'.p'
         datafile='win'+str(window_num)+'_width_data_'+p0ang+'.p'
         print "-------------------STATISTICS FOR WINDOW "+str(window_num)+"---------------------"
@@ -601,10 +786,80 @@ def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,s
         print 'Results saved in ' + statfile
         data={'period':period,'rising':rising,'falling':falling,'widths':width}
         stdict={'mean':avg,'median':med,'stddev':stdv}
-        pickle.dump(stdict,open(statfile,'wb'))
+        pickle.dump([stdict,tolerance,n],open(statfile,'wb'))
         pickle.dump(data,open(datafile,'wb'))
 
-    return period,width
+    return period,width,check
+
+def rising_or_falling_final(xpeak,xpeak_int, imgrad,n=9, quiet=True,filter_multiples=True,filter_nominal=False):
+    rising=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imgrad[xpeak_int[i]-1:xpeak_int[i]+2]) > 0.] #take 3 pix around xpeak
+    #need xpeaks to be integers now
+    falling=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imgrad[xpeak_int[i]-1:xpeak_int[i]+2]) < 0.]
+
+    if not quiet:
+        print "First falling: ",falling[0]
+        print "First rising: ",rising[0]
+        print "First 10 falling: ",falling[:10]
+        print "First 10 rising: ",rising[:10]
+        #print "First 10 falling masks: ",falling_mask[:10]
+        #print "First 10 rising masks: ",rising_mask[:10]
+        print 'f[0]-r[0]: ',falling[0]-rising[0]
+        print 'f[1]-r[0]: ',falling[1]-rising[0]
+
+    #edit to ingore falling values without a rising value between them and vice versa. This should help cut down on some errant widths at least. (should I allow these to stay for the period calculations though?)
+    #if falling[0] > rising[0]:
+        #not so fast....
+        #width=[f-r for r,f in zip(rising,falling)]#falling-rising
+
+    #else: #first one is falling
+        #width=[f-r for r,f in zip(rising,falling[1:])]
+
+    flist=[0 for f in falling]
+    rlist=[1 for r in rising]
+    rlist.extend(flist)
+    masterlist=rising
+    masterlist.extend(falling)
+    locs, rorf = (list(t) for t in zip(*sorted(zip(masterlist, rlist)))) #list of x-coordinates and list of rising or falling codes (1 or 0)
+
+    width, periodr,periodf=[],[],[]
+    #now get the widths
+    for i,loc,code in zip(range(0,len(locs[:-2])),locs[:-2],rorf[:-2]):
+        testsum=code+rorf[i+1]
+        if testsum == 2 and locs[i+1]-loc >n: #two r's
+            periodr.append(locs[i+1]-loc)
+        elif testsum == 1: #r and f (but in what order?)
+            if code ==1: #r then f
+                width.append(locs[i+1]-loc)
+                if code+rorf[i+2]==2 and locs[i+2]-loc >n:
+                    periodr.append(locs[i+2]-loc)
+            elif code+rorf[i+2]==0 and locs[i+2]-loc >n: #f then r then f
+                periodf.append(locs[i+2]-loc)
+        elif testsum == 0 and locs[i+1]-loc >n: #f and f
+            periodf.append(locs[i+1]-loc)
+
+    #now how to calculate the periods for the ones that have r's and f's between them anyway??
+
+    #periodr= [rising[i+1] - rising[i] for i in range(0,len(rising)-1)]#rising-rising
+    #periodf=[falling[i+1] - falling[i] for i in range(0,len(falling)-1)]#falling - falling
+    period=periodr#np.mean(periodr+periodf)
+    period.extend(periodf)
+
+    if filter_multiples: #mask widths and periods that are 1.5 or more times the median value
+        pmed=np.median(period)
+        period=np.ma.masked_greater(period,1.5*pmed)
+        period=np.ma.masked_less(period,0.5*pmed)
+        wmed=np.median(width)
+        width=np.ma.masked_greater(width,1.5*wmed) #should I also mask when less than?
+        width=np.ma.masked_less(width,0.5*wmed) #should I also mask when less than?
+
+    if filter_nominal != False: #mask widths and periods that are 1.5 or more times the median value
+        #print filter_nominal
+        period=np.ma.masked_greater(period,1.5*filter_nominal)
+        period=np.ma.masked_less(period,0.5*filter_nominal)
+        width=np.ma.masked_greater(width,.75*filter_nominal) #should I also mask when less than?
+        width=np.ma.masked_less(width,0.25*filter_nominal) #should I also mask when less than?
+
+    return rising,falling,periodr,periodf,period,width
 
 def print_all_stats(win):
     statfiles=glob.glob('win'+str(win) + '*_stats*'+'.p')
@@ -1318,32 +1573,32 @@ def get_slit_width(edges,mag=5.0,im=False,window_num=False, title='',xran=[0,45]
     return widths,bins
 
 
-def get_theta_range(edges,side=1.0,spread=5.,n=201):
+def get_theta_range(nang,spread=5.,n=201):
     #define range of theta around theta_nominal
-    if type(edges) == int:
-        winnum=edges
-    elif 'win' not in edges:
-        try:
-            winnum=int(edges)
-        except ValueError:
-            edges=raw_input('What is the window number?')
-            winnum=int(edges)
-    else:
-        winnum,index=get_index(edges)
-        winnum=int(winnum)
-    if side==1.0:
-        nang=[w['nominal angle'] for w in windows if w['number'] == winnum]
-        nang=nang[0]
-    else:
-        nang=[w['nominal angle'] for w in windowsr if w['number'] == winnum]
-        nang=-1*nang[0]
+#     if type(edges) == int:
+#         winnum=edges
+#     elif 'win' not in edges:
+#         try:
+#             winnum=int(edges)
+#         except ValueError:
+#             edges=raw_input('What is the window number?')
+#             winnum=int(edges)
+#     else:
+#         winnum,index=get_index(edges)
+#         winnum=int(winnum)
+#     if side==1.0:
+#         nang=[w['nominal angle'] for w in windows if w['number'] == winnum]
+#         nang=nang[0]
+#     else:
+#         nang=[w['nominal angle'] for w in windowsr if w['number'] == winnum]
+#         nang=-1*nang[0]
     theta0= nang*(np.pi/180.)#in radians
     #tendeg2rad=np.pi/18.
     spreaddeg2rad=spread*(np.pi/180.)
     thetaran = np.linspace(theta0-spreaddeg2rad, theta0+spreaddeg2rad, num=n)#in radians
     return thetaran
 
-def prob_hough(edges, threshold=10, line_length=50, line_gap=2,retlines=False,plot=False,side=1.0,spread=5.,n=201, tag=False,overwrite=False):
+def prob_hough(edges, nang,threshold=10, line_length=50, line_gap=2,retlines=False,plot=False,spread=5.,n=201, tag=False,overwrite=False):
     '''Perform probabilistic Hough fit to given set of edges'''
     import glob
     if type(edges) == str: #it's a filename
@@ -1362,7 +1617,7 @@ def prob_hough(edges, threshold=10, line_length=50, line_gap=2,retlines=False,pl
         if names !=[]:
             return
 
-    thetaran=get_theta_range(edges,spread=spread,n=n,side=side)
+    thetaran=get_theta_range(nang,spread=spread,n=n)
     start=time.time()
     lines = probabilistic_hough_line(edata, threshold=threshold, line_length=line_length,
                                  line_gap=line_gap, theta=thetaran)
@@ -1544,7 +1799,10 @@ def cat_hough(window_num, imtags='X_', tags=['ll150','ll200','ll250','ll300'],we
         #all_lines=lines
         #print len(all_lines)
         for i,tag in enumerate(tags):
-            lines=pickle.load(open(basen+'_'+tag+'.p','rb'))
+            try:
+                lines=pickle.load(open(basen+'_'+tag+'.p','rb'))
+            except IOError:
+                continue
             #print len(lines)
             if not weights:
                 all_lines.extend(lines)
@@ -1554,7 +1812,7 @@ def cat_hough(window_num, imtags='X_', tags=['ll150','ll200','ll250','ll300'],we
             #print len(all_lines)
         pickle.dump(all_lines,open(basen+'_'+outtag+'.p','wb'))
 
-def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=False,stats=True,figname=False,side=1.0,spread=5.,n=201,gaussfit=False, sameline=True,tol=3): #cuz of mpi
+def hough_hist(lines, windownum, nang, mag=5.0,log=True,ret=False, title=False,xran=False,stats=True,figname=False,spread=5.,n=201,gaussfit=False, sameline=True,tol=3,mask45=False): #cuz of mpi
     '''Make a histogram of the line orientations returned by probabilistic Hough'''
     theta=[]
     llist=[]
@@ -1586,43 +1844,57 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
                 continue
 
     print len(theta), np.min(theta),np.max(theta)
-
-    thetaran=get_theta_range(windownum,side=side,n=n,spread=spread)
+    if mask45:
+        theta=np.ma.masked_equal(theta,45.0)
+    thetaran=get_theta_range(nang,n=n,spread=spread)
     #make a histogram
     fig,ax=plt.subplots()
 
     thetaax=np.arange(np.min(theta),np.max(theta),.05)
     if theta !=[]:
-        yhist,xhist=np.histogram(theta,thetaax)
+        try:
+            yhist,xhist=np.histogram(theta.compressed(),thetaax) #if masked array
+        except AttributeError:
+            yhist,xhist=np.histogram(theta,thetaax)
         foo=ax.hist(theta,thetaax)
 
     if gaussfit:
-        xh = np.where(yhist > 0)[0]
-        yh = yhist[xh]
+        #hindex=np.where(yhist > 0)[0]
+        #xh = xhist[hindex] #do I really want to fit this? this is indexes not theta...
+        #yh = yhist[xh]
         #print np.max(yhist), np.mean(yhist), np.std(yhist)
+        if xran: #fit also within nthe given x-range
+            hindexl=np.where(xhist >= xran[0])[0]
+            hindexh=np.where(xhist <= xran[1])[0]
+            xhist=xhist[hindexl[0]:hindexh[-1]]
+            yhist=yhist[hindexl[0]:hindexh[-1]]
+        if np.shape(xhist) !=np.shape(yhist):
+            xhist=xhist[:-1]
         def gaussian(x, a, mean, sigma):
             return a * np.exp(-((x - mean)**2 / (2 * sigma**2)))
-        y_at_xmean=yhist[np.where(xhist>np.mean(theta))[0][0]]
-        popt, pcov = curve_fit(gaussian, xh, yh, [y_at_xmean, np.mean(theta), np.std(theta)])
+        y_at_xmean=yhist[np.where(xhist>np.ma.mean(theta))[0][0]]
+        popt, pcov = curve_fit(gaussian, xhist, yhist, [y_at_xmean, np.ma.mean(theta), np.ma.std(theta)])
         ax.plot(thetaax, gaussian(thetaax, *popt))
-        print np.max(gaussian(thetaax, *popt)),np.min(gaussian(thetaax, *popt))
+        gcurve=gaussian(thetaax, *popt)
+        maxval= np.max(gcurve)#,np.min(gaussian(thetaax, *popt))
         #import matplotlib.mlab as mlab
         #gauss=mlab.normpdf(thetaax,np.mean(theta),np.var(theta))
         #ax.plot(thetaax,gauss)
-        #print np.where(gauss==np.max(gauss)), thetaax[np.where(gauss==np.max(gauss))[0]]
-    if side==1.0:
-        ang=[aa['nominal angle'] for aa in windows if aa['number']==windownum]
-    else:
-        ang=[aa['nominal angle'] for aa in windowsr if aa['number']==windownum]
+        print np.where(gcurve==maxval), thetaax[np.where(gcurve==maxval)[0]]
+    #if side==1.0:
+    #    ang=[aa['nominal angle'] for aa in windows if aa['number']==windownum]
+    #else:
+    #    ang=[aa['nominal angle'] for aa in windowsr if aa['number']==windownum]
+    ang=nang
 
     if stats: #print out and pickle stats
-        avg=np.mean(theta)
-        med=np.median(theta)
-        stdv=np.std(theta)
+        avg=np.ma.mean(theta)
+        med=np.ma.median(theta)
+        stdv=np.ma.std(theta)
         statfile='win'+str(windownum)+'_angle_stats_'+str(mag)+'.p'
         datafile='win'+str(windownum)+'_angle_data'+str(mag)+'.p'
         print "-------------------STATISTICS FOR WINDOW "+str(windownum)+"---------------------"
-        print '     Nominal Angle: ' + str(ang[0])
+        print '     Nominal Angle: ' + str(ang)
         print '              Mean: ' + str(avg)
         print '            Median: ' + str(med)
         print 'Standard Deviation: ' + str(stdv)
@@ -1634,7 +1906,7 @@ def hough_hist(lines, windownum, mag=5.0,log=True,ret=False, title=False,xran=Fa
 
     if windownum:
         #ang=[aa['nominal angle'] for aa in windows if aa['number']==windownum]
-        xran=[side*ang[0]-2.,side*ang[0]+2.]
+        xran=[ang-2.,ang+2.]
         title='Slat angle distribution for window '+str(windownum) #+ ', nominal angle '+str(ang[0])[:-3] + ' degrees'
         #print title
     if not title:
@@ -1734,7 +2006,7 @@ def get_length(line):
 
 def get_angle(line):
     '''Get angle of line via tangent. Note that because the top left corner is 0,0 in the background image we multiply x's by -1'''
-    deltax=-1*(line[1][0]-line[0][0])
+    deltax=-1.*(line[1][0]-line[0][0]) #removed -1.*
     deltay=line[1][1]-line[0][1]
     theta=np.arctan(float(deltay)/float(deltax))  #np.arctan2(float(deltay)/float(deltax))
     thetadeg=np.rad2deg(theta) #theta*180./np.pi
