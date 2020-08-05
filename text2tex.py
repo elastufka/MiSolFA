@@ -16,7 +16,7 @@ def rv(value):
 
 def make_full_table():
     frontdir='/Users/wheatley/Documents/Solar/MiSolFA/OpticalAnalysis/mw561sub3501_2018_06_26'
-    reardir='/Users/wheatley/Documents/Solar/MiSolFA/OpticalAnalysis/mw469sub2765_2018_01_31'
+    reardir='/Users/wheatley/Documents/Solar/MiSolFA/OpticalAnalysis/mw501sub3437_2018_05_04'
     fwlines,falines,rwlines,ralines=[],[],[],[]
     os.chdir(frontdir)
     statfiles=glob.glob('*stats5.0Xa.p')
@@ -59,7 +59,7 @@ def make_full_table():
     lines=[fwlines[i]+falines[i]+rwlines[i]+ralines[i] for i in range(0,len(fwlines))]
     ll=' '.join(lines)
     os.chdir('../')
-    with open('results_table.txt','wb') as f:
+    with open('QMresults_table.txt','wb') as f:
         f.write(ll)
 
 def fit_table():

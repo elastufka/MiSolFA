@@ -15,13 +15,13 @@ import os
 
 if __name__ == '__main__':
     wins=[11,21,12,22,31,41,32,42,33,43,34,44]
-    ll=[50,100,150,200,250]
+    ll=[20,30,50,100]#[50,100,150,200,250]
 
     #front window EM - need to get the additional images for win 21 from a previous run...
-    tols=[10,12,4,4,7,7,3,3,2,2,1,1]
-    sigma=[2.,2.,1.5,1.5,2.,2.,1.5,1.5,.75,.75,1.0,1.0]
-    sides=[1,1,1,1,1,1,1,1,1,1,1,1]
-    cparams=[{'tpix':350,'lpix':400,'rpix':False,'bpix':False},{'tpix':False,'lpix': 300,'rpix':False,'bpix':400},{'tpix':400,'rpix':400,'lpix':False,'bpix':False},{'lpix':False,'tpix':False,'rpix':400,'bpix':400},{'tpix':350,'lpix':400,'rpix':False,'bpix':False},{'tpix':False,'lpix': 300,'rpix':False,'bpix':400},{'tpix':400,'rpix':400,'lpix':False,'bpix':False},{'lpix':False,'tpix':False,'rpix':400,'bpix':400},{'tpix':350,'lpix':400,'rpix':False,'bpix':False},{'tpix':False,'lpix': 300,'rpix':False,'bpix':400},{'tpix':400,'rpix':400,'lpix':False,'bpix':False},{'lpix':False,'tpix':False,'rpix':400,'bpix':400}]
+#     tols=[10,12,4,4,7,7,3,3,2,2,1,1]
+#     sigma=[2.,2.,1.5,1.5,2.,2.,1.5,1.5,.75,.75,1.0,1.0]
+#     sides=[1,1,1,1,1,1,1,1,1,1,1,1]
+#     cparams=[{'tpix':350,'lpix':400,'rpix':False,'bpix':False},{'tpix':False,'lpix': 300,'rpix':False,'bpix':400},{'tpix':400,'rpix':400,'lpix':False,'bpix':False},{'lpix':False,'tpix':False,'rpix':400,'bpix':400},{'tpix':350,'lpix':400,'rpix':False,'bpix':False},{'tpix':False,'lpix': 300,'rpix':False,'bpix':400},{'tpix':400,'rpix':400,'lpix':False,'bpix':False},{'lpix':False,'tpix':False,'rpix':400,'bpix':400},{'tpix':350,'lpix':400,'rpix':False,'bpix':False},{'tpix':False,'lpix': 300,'rpix':False,'bpix':400},{'tpix':400,'rpix':400,'lpix':False,'bpix':False},{'lpix':False,'tpix':False,'rpix':400,'bpix':400}]
 
     #rear window EM
 #     tols=[12,12,4,4,7,7,3,3,5,5,1,1]
@@ -29,11 +29,11 @@ if __name__ == '__main__':
 #     sides=[0,0,0,0,0,0,0,0,0,0,0,0]
 #     cparams=[{'lpix':250,'tpix':100,'rpix':100,'bpix':240},{'lpix':250,'tpix':100,'rpix':100,'bpix':300},{'lpix':250,'tpix':100,'rpix':100,'bpix':300},{'lpix':250,'tpix':100,'rpix':100,'bpix':300},{'lpix':250,'tpix':100,'rpix':100,'bpix':300},{'lpix':250,'tpix':100,'rpix':100,'bpix':300},{'lpix':250,'tpix':100,'rpix':100,'bpix':300},{'lpix':250,'tpix':100,'rpix':100,'bpix':300},{'lpix':250,'tpix':50,'rpix':False,'bpix':300},{'lpix':250,'tpix':50,'rpix':False,'bpix':300},{'lpix':250,'tpix':50,'rpix':False,'bpix':300},{'lpix':250,'tpix':50,'rpix':False,'bpix':300}]
 
-#     #rear window QM (the real front window)
-#     tols=[7,7,7,7,5,5,4,4,2,2,1,1]
-#     sigma=[2.,2.,2.,2.,2.,2.,1.75,1.75,1.5,1.5,1.25,1.25]
-#     sides=[0,0,0,0,0,0,0,0,0,0,0,0]
-#     cparams=[{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':30,'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'tpix':60,'rpix':False,'bpix':False}]
+#     #rear window QM
+    tols=[7,7,7,7,5,5,4,4,2,2,1,1]
+    sigma=[2.,2.,2.,2.,2.,2.,1.75,1.75,1.5,1.5,1.25,1.25]
+    sides=[0,0,0,0,0,0,0,0,0,0,0,0]
+    cparams=[{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':30,'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'tpix':60,'rpix':False,'bpix':False}]
 
     #front window QM. Sept=True,May=False
 #     tols=[7,7,7,7,5,5,4,4,2,2,1,1]
@@ -41,27 +41,28 @@ if __name__ == '__main__':
 #     sides=[1,1,1,1,1,1,1,1,1,1,1,1]
 #     cparams=[{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':30,'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'rpix':False,'bpix':False},{'lpix':60,'tpix':60,'rpix':False,'bpix':False},{'tpix':60,'rpix':False,'bpix':False},{'tpix':60,'rpix':False,'bpix':False}]
 
-    n=8
+    n=0
     for w,t,sig,s,cp in zip(wins[n:],tols[n:],sigma[n:],sides[n:],cparams[n:]):
         #tw=Grating(w,May=True,EM=True,side=s)
         #tw=Grating(w,May=True,EM=False,side=s) #QM front grid
-        tw=Grating(w,Apr=True,May=False) #EM rear window - the real one...did I fix that?
+        #tw=Grating(w,Apr=True,May=False) #EM rear window - the real one...did I fix that?
+        tw=Grating(w, May=True, EM=False,side=s)
         #cropping
-        tw.trim_optical_edges(**cp)
+        #tw.trim_optical_edges(**cp)
         tw.__get_and_store_data__()
         tw.parameterize_optical(coverwrite=True,hoverwrite=True, tol=t,sigma=sig)
 
     #plot derived vs. nominal parameters, with error bars
     means,noms,yerr=[],[],[]
     for w in win:
-        dummy=Grating(w,May=True,EM=True, side=0)
+        dummy=Grating(w,May=False,Sept=True,EM=False, side=0)
         os.chdir(dummy.data.Odata.path)
         stats=pickle.load(open('win'+str(w)+'_width_stats5.0Xa.p','rb'))
         means.append(stats['mean'])
         noms.append(dummy.nominal['pitch'])
         yerr.append([-1*stats['stddev'],stats['stddev']])
     fig,ax=plt.subplots()
-    ax.errorbar(wins,np.array(means)-np.array(noms),yerr=np.transpose(np.array(yerr)),'o')
+    ax.errorbar(wins,np.array(means)-np.array(noms),yerr=np.transpose(np.array(yerr)))
     fig.suptitle('Sub 2765 - EM Rear Grid')
     ax.set_xlabel('Window Number')
     ax.set_ylabel('Measured Period Difference ($\mu$m)')

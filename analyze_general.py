@@ -23,6 +23,7 @@ from scipy.optimize import curve_fit
 import time
 import glob
 import os
+import csv
 
 #####################################  IMAGE PREPROCESSING ###########################################
 
@@ -53,6 +54,28 @@ def remove_edges(filen,im,maxx='10',maxy='13',lpix=50,rpix=50,tpix=50,bpix=50,wr
         if imindex[1] == maxy and bpix != False: #it's got an edge on the bottom, so mask the edges
             im=im[:bpix,:]
             cropped=True
+        #print np.shape(im)
+    if write and cropped:
+        os.rename(filen,filen[:-4]+'_uncropped.tif') #first rename old file
+        marray=Image.fromarray(im) #raw, unequalised array
+        marray.save(filen)
+    return im
+
+def remove_edges_general(filen,lpix=50,rpix=50,tpix=50,bpix=50,write=True):
+    '''remove edges from images with edges of the window in them'''
+    im=im2ndarray(filen)
+    if lpix != False: #it's got an edge on the left, trim the array (x and y are flipped for some reason)
+        im=im[:,lpix:]
+        cropped=True
+    if rpix != False: #it's got an edge on the right, trim the array
+        im=im[:,:-rpix]
+        cropped=True
+    if tpix != False: #it's got an edge on the top, so mask the edges
+        im=im[tpix:,:]
+        cropped=True
+    if  bpix != False: #it's got an edge on the bottom, so mask the edges
+        im=im[:bpix,:]
+        cropped=True
         #print np.shape(im)
     if write and cropped:
         os.rename(filen,filen[:-4]+'_uncropped.tif') #first rename old file
@@ -96,19 +119,39 @@ def make_dark(darkdir, ndarks=10,saveim=False):
         out.show()
     return darkarr
 
-def contrast_stretch(imf,saveim=True):
+def contrast_stretch(imf,saveim=True,t=98,b=2,hist=False,show=False):
     if type(imf) == str:
         im=im2ndarray(imf)
-    p2 = np.percentile(im, 2)
-    p98 = np.percentile(im, 98)
+    p2 = np.percentile(im, b)
+    p98 = np.percentile(im, t)
     corrected_image = exposure.rescale_intensity(im, in_range=(p2, p98))
-    savec=scipy.misc.toimage(im,high=np.max(im),low=np.min(im),mode='F')
-    imname=imf[:-12]+'corrected.tif'
+    savec=scipy.misc.toimage(corrected_image,mode='F') #want this to be greascale!
+    imname=imf[:-4]+'_corrected.tif' #why -12?
     if saveim:
         savec.save(imname)
+    if hist:
+        fig,ax=plt.subplots(1,2)
+        h1,_,_=ax[0].hist(im.ravel(),256)
+        h2,_,_=ax[1].hist(corrected_image.ravel(),256)
+        ax[0].set_title('original')
+        ax[1].set_title('contrast stretched')
+        for a in ax:
+            a.set_xlim([0,256])
+            a.set_ylim([0,np.max([np.max(h1),np.max(h2)])])
+        fig.show()
+    if show:
+        fig,ax=plt.subplots(1,2,sharex=True,sharey=True)
+        ax[0].imshow(im,cmap=cm.gray)
+        ax[1].imshow(corrected_image,cmap=cm.gray)
+        ax[0].set_title('original')
+        ax[1].set_title('contrast stretched')
+
+        fig.show()
+
+
     return imname
 
-def correct_image(im,dark,flat,fac=False,saveim=False, pickleimarr=False, contrast_stretch=False,show=False,ret=False):
+def correct_image(im,dark,flat,fac=False,saveim=False, pickleimarr=False, contrast_stretch=False,show=False,ret=False, hist=False,xraydemo=False):
     if type(im) == str:
         im=im2ndarray(im)
     imc=im-dark
@@ -120,14 +163,44 @@ def correct_image(im,dark,flat,fac=False,saveim=False, pickleimarr=False, contra
         #contrast stretching
         p2 = np.percentile(corrected_image, 2)
         p98 = np.percentile(corrected_image, 98)
-        corrected_image = exposure.rescale_intensity(corrected_image, in_range=(p2, p98))
-        savec=scipy.misc.toimage(corrected_image,high=np.max(corrected_image),low=np.min(corrected_image),mode='F')
+        stretched_image = exposure.rescale_intensity(corrected_image, in_range=(p2, p98))
+        savec=scipy.misc.toimage(stretched_image,mode='F')
     else:
-        savec=scipy.misc.toimage(corrected_image,high=np.max(corrected_image),low=np.min(corrected_image),mode='F')
+        savec=scipy.misc.toimage(corrected_image,mode='F')
+
+    if xraydemo: #recreat fig3 from tomcat report
+        fig,ax=plt.subplots(1,4)
+        ax1=ax[0]
+        ax2=ax[1]
+        ax3=ax[2]
+        ax4=ax[3]
+        ax1.imshow(im)
+        ax2.imshow(corrected_image)
+        ax3.imshow(flatc)
+        ax4.hist(im.ravel(),256,label='original',histtype='step')
+        ax4.hist(corrected_image.ravel(),256,label='corrected',histtype='step')
+        ax4.hist(flatc.ravel(),256,label='flat - dark',histtype='step')
+        ax4.legend(loc='upper right')
+        ax1.set_title('original')
+        ax2.set_title('corrected')
+        ax3.set_title('flat - dark')
+        plt.axis('off')
+        fig.show()
+        show=False
+        saveim=False #"xray_demo.png"
+        pickleimarr=False
+        ret=False
 
     if show:
         fig,ax=plt.subplots()
         ax.imshow(savec,cmap=cm.gray)
+        if hist:
+            ax1=plt.add_subplot(1,2,1)
+            ax2=plt.add_subplot(1,2,2)
+            ax1.hist(im.ravel(),256)
+            ax2.hist(corrected_image.ravel(),256)
+            ax1.set_title('original')
+            ax2.set_title('corrected')
         fig.show()
     if saveim:
         savec.save(saveim)
@@ -139,19 +212,19 @@ def correct_image(im,dark,flat,fac=False,saveim=False, pickleimarr=False, contra
 def check_correction():
     ''' check that the correction works for all the datasets'''
     from skimage import exposure
-    dirs=['EMmodel/SLS_Apr2018','QMmodel/SLS_May2018','QMmodel/SLS_Sept2018']
+    dirs=['EMmodel/SLS_Apr2018']#,'QMmodel/SLS_May2018','QMmodel/SLS_Sept2018']
     #labs=['','',']
-    fig,ax=plt.subplots(3,4,figsize=[15,10])
+    fig,ax=plt.subplots(1,4)#,figsize=[10,5]) #[15,10]
     for d,a in zip(dirs,ax):
         os.chdir(d)
         flat=pickle.load(open('transm'+d[:2]+'_combined_flat.p','rb'))
         dark=pickle.load(open('transm'+d[:2]+'_combined_dark.p','rb'))
         if d =='QMmodel/SLS_Sept2018':
             flat =pickle.load(open('transmQM_flat_post.p','rb'))
-        dfile=glob.glob('transm'+d[:2]+'/win*_p3_0.tif')[0]
+        dfile=glob.glob('transm'+d[:2]+'/transm*.tif')[0]
         testim=im2ndarray(dfile)
         print dfile
-        a[0].imshow(testim,origin='bottom left')
+        ax[0].imshow(testim,origin='bottom left')
         thist,tbc=exposure.histogram(testim-dark,nbins=256)
         fhist,fbc=exposure.histogram(flat-dark,nbins=256)
         tbinmax=tbc[np.where(thist == np.max(thist[70:]))[0]]
@@ -162,25 +235,27 @@ def check_correction():
         #tbcr=np.reshape(tbc,2040)
         #print np.shape(thistr),np.shape(tbcr),np.shape(testim)
         #a[0].plot(tbcr,thistr,lw=2)
-        a[0].set_title(d[8:]+' original')
+        ax[0].set_title('original')#(d[8:]+' original')
         cim=correct_image(testim,dark,flat,fac=fac,ret=True,saveim='testim.tif')
-        a[1].imshow(cim,origin='bottom left')#,norm=matplotlib.colors.Normalize(vmin=.9*np.min(cim),vmax=1.1*np.max(cim)))
+        ax[1].imshow(cim,origin='bottom left')#,norm=matplotlib.colors.Normalize(vmin=.9*np.min(cim),vmax=1.1*np.max(cim)))
         chist,cbc=exposure.histogram(cim*256.,nbins=256)
         #print np.shape(chist),np.shape(cbc)
         #a[1].plot(cbc,chist,lw=2)
-        a[1].set_title(d[8:]+' corrected')
-        a[2].imshow(flat-dark,origin='bottom left')
+        ax[1].set_title('corrected')#(d[8:]+' corrected')
+        ax[2].imshow(flat-dark,origin='bottom left')
         print np.shape(tbc),np.shape(fbc)
         #a[2].plot(fbc,fhist,lw=2)
-        a[2].set_title(d[8:]+' flat-dark')
+        ax[2].set_title('flat - dark')#(d[8:]+' flat-dark')
         #hist, bins_center = exposure.histogram(camera)
         #plt.plot(bins_center, hist, lw=2)
-        a[3].plot(range(0,256),thist,'r',label='original')
-        a[3].plot(range(0,256),chist,'b',label='corrected')
-        a[3].plot(range(0,256),fhist,'g',label='flat-dark')
-        a[3].legend(loc='upper right')
+        ax[3].plot(range(0,256),thist,'r',label='original')
+        ax[3].plot(range(0,256),chist,'b',label='corrected')
+        ax[3].plot(range(0,256),fhist,'g',label='flat-dark')
+        #ax[3].set_xlim([0,256])
+        ax[3].set_ylim([0,np.max(cim)])
+        ax[3].legend(loc='upper right')
 
-        for aa in a:
+        for aa in ax:
             aa.axis('off')
         os.chdir('../../')
     fig.show()
@@ -254,10 +329,13 @@ def combine_darks(prior_dir,nprior,npost,post_dir=False):
 
     return combined_dark
 
-def flatdark(imlist, dark, flat):
+def flatdark(imlist, dark, flat,gw=False):
     newimnames=[]
     for im in imlist:
-        newimname=im[:-4]+'_flatdark.tif'
+        if gw:
+            newimname=im[:-4]+'_corrected.tif'
+        else:
+            newimname=im[:-4]+'_flatdark.tif'
         newimnames.append(newimname)
         correct_image(im, dark,flat, saveim=newimname)
     return newimnames
@@ -294,6 +372,17 @@ def get_index(filen):
         filen=filen[filen.find('win')-1:]
     windex=filen[filen.find('win')+3:filen.find('_')]
     indices=filen[filen.find('_')+1:filen.rfind('5.0')-1]
+    if indices.endswith('_'):
+        indices= indices[:-1]
+    index=[indices[:2],indices[3:]]
+    return windex,index
+
+def get_index_general(filen,keywin='window',keyidx='_'):
+    '''Parse filename to get indices of image in window as well as overall window index. This helps determine whether or not it includes the edge of the window.'''
+    if len(filen) > 50: #it's the whole thing
+        filen=filen[filen.find(keywin)-1:]
+    windex=filen[filen.find(keywin)+6:filen.find(keywin)+9]
+    indices=filen[filen.rfind(keyidx)-7:filen.rfind(keyidx)]
     if indices.endswith('_'):
         indices= indices[:-1]
     index=[indices[:2],indices[3:]]
@@ -407,6 +496,209 @@ def mosaic(window_num, coords, all=False, plot=True,plot_coords=False, mag=5.0):
     #return mfiles
     #return fnames,cpixx,cpixy
 
+def numpy_mosaic(filenames, ycoords=False, pix2um=6.5,alpha=.75,xoff=-1,bpix=3,bw=False):
+    '''1000 um / 6.5 um/pix =
+    this still doesn't really work well :( '''
+    if not ycoords:
+        ycoords=range(0,len(filenames))
+
+    ysize,xran=np.shape(im2ndarray(filenames[0]))
+    #calculate y-dim of new mosaic
+    ydiff=int((float(ycoords[1]-ycoords[0])*1000.)/pix2um) #mm 2 pixels
+    yran=ydiff*(len(filenames)+1)
+    nim=len(filenames)-1
+    newarr=np.zeros([yran,xran])
+    #make the np array
+    arrlist=[]
+    for f in filenames:
+        arrlist.append(im2ndarray(f))
+    for a,b,c in zip(arrlist[:-1],arrlist[1:],range(0,nim)):
+        overlap_a=a[bpix:ydiff,:] #ex. a[3:154,:]
+        #rest_a=a[ydiff:-bpix,:]  #ex. a[154:-3,:]
+        rest_a=a[ydiff:,:]  #ex. a[154:-3,:]
+        #overlap_b=b[-ydiff:-bpix,:] #ex. b[-154:-3,:]
+        overlap_b=b[-ydiff:-bpix,:] #ex. b[-154:-3,:]
+        rest_b=b[bpix:-ydiff,:] #ex. b[3:154,:]
+        mean_overlap=(overlap_a + overlap_b)/2.
+        extent_rest_a=np.shape(rest_a)[0]
+        extent_rest_b=np.shape(rest_b)[0]
+        extent_overlap=np.shape(mean_overlap)[0]
+        c1=yran-(c+1)*extent_rest_a
+        c2=yran-c*extent_rest_a
+        #c3=yran-(c+3)*extent_overlap
+        c4=c1-extent_overlap
+        c5=c4-extent_rest_b
+        #c5=yran-(c+2)*(ydiff-3)-np.shape(rest_b)[0]
+        #c6=yran-(c+2)*(ydiff-3)
+        newarr[c1:c2,:xran-c*xoff]=rest_a[:,c*xoff:]
+        #newarr[yran-(c+1)*(ydiff-2)-1:yran-c*np.shape(rest_a)[0]-2,:]=rest_a
+        #print c1,c2
+        newarr[c4:c1,:xran-(c+1)*xoff]=mean_overlap[:,(c+1)*xoff:]
+        #newarr[yran-(c+2)*(ydiff-2):yran-(c+1)*(ydiff-2)-1,:]=mean_overlap
+        #print c4,c1
+        newarr[c5:c4,:xran-(c+2)*xoff]=rest_b[:,(c+2)*xoff:]
+        #print c5,c4
+        #print ''
+        #get mean of overlapping region
+    fig,ax=plt.subplots(5,1)
+    if bw:
+        cmap=cm.Greys
+    else:
+        cmap=cm.Rainbow
+    norm=matplotlib.colors.Normalize(vmin=10*np.min(newarr),vmax=.8*np.max(newarr))
+    ax[0].imshow(rest_a,origin='lower left')
+    ax[1].imshow(overlap_a,origin='lower left')
+    ax[2].imshow(overlap_b,origin='lower left')
+    ax[3].imshow(mean_overlap,origin='lower left')
+    ax[4].imshow(rest_b,origin='lower left')
+    print np.shape(rest_a),np.shape(mean_overlap),np.shape(rest_b)
+    fig.show()
+
+    fig,ax=plt.subplots()
+    ax.set_ylim([0,yran])
+    ax.set_xlim([0,xran])
+    ysize=284
+    for c,f in zip(ycoords,arrlist):
+        #trim top and bottom 2px of each image - it's blurry
+        newf=f[3:-3,:]
+        ax.imshow(newf,extent=(0,xran,(nim-c)*(ydiff),(nim-c)*(ydiff)+ysize),alpha=alpha, origin='upper left',cmap=cmap,norm=norm)
+        print np.shape(newf)
+        print 0,xran,(nim-c)*(ydiff),(nim-c)*(ydiff)+ysize
+    #ax.imshow(newarr)
+    fig.show()
+
+
+def angle_by_index(hough_lines, xpeak_int=False,imfilename=False,plot_idx=False, plot_angle=False,ptol=2,alpha=0.6):
+    ''' Get line orientation as a function of line index. ie. layer in Gridwinder grids'''
+    #determine which line goes with which xpeak to within ptol px
+    theta_dict={}
+    xidx,alltheta=[],[]
+    if type(xpeak_int) == str: #take 3 'strips' of the images and get the xpeaks from there
+        edges=pickle.load(open(xpeak_int,'rb'))
+        xpeak_low = sum_peaks(clean_centers(edges[10:20,:],sigma=1.25),tol=4)
+        xpeak_med= sum_peaks(clean_centers(edges[130:150,:],sigma=1.25),tol=4)
+        xpeak_hi = sum_peaks(clean_centers(edges[270:280,:],sigma=1.25),tol=4)
+        xl_int=[int(x) for x in xpeak_low]
+        xm_int=[int(x) for x in xpeak_med]
+        xh_int=[int(x) for x in xpeak_hi]
+        xl_int.sort()
+        xm_int.sort()
+        xh_int.sort()
+        #print len(xl_int),len(xm_int),len(xh_int) # if they're not the same length there's a problem....
+        #xpeak_int=[xl_int,xm_int,xh_int]
+    else:
+        xpeak_int.sort()
+    hough_lines.sort()
+    for lidx,l in enumerate(hough_lines):
+        ep1=l[0] #higher
+        ep2=l[1] #lower
+        #where are the endpoints located relative to the slices?
+        #endpoint 1:
+        for ep in [ep1,ep2]:
+            if ep[1] >=200:
+                idx,xpval=find_nearest(xh_int,ep[0])
+            elif  ep[1]<=100:
+                idx,xpval=find_nearest(xl_int,ep[0])
+            else:
+                idx,xpval=find_nearest(xm_int,ep[0])
+
+            if np.abs(ep[0]-xpval) < ptol:
+                theta=np.abs(get_angle(l))
+                theta_dict[lidx]=[idx,theta,xpval,l]
+                xidx.append(idx)
+                alltheta.append(theta)
+                break
+
+    onex,onetheta=range(0,len(xl_int)),[]
+    xiter=iter(xidx)
+    thiter=iter(alltheta)
+    for o in onex:
+        try:
+            ctheta=[thiter.next()]
+            while xiter.next() == o:
+                ctheta.append(thiter.next())
+        except StopIteration:
+            onetheta.append(np.mean(ctheta))
+            break
+        onetheta.append(np.mean(ctheta))
+        #print o,np.mean(ctheta)
+
+    if plot_idx and imfilename: #plot image annotated with text describing line index and label
+        yidx=50
+        yang=150
+        fig,ax=plt.subplots()
+        ax.imshow(im2ndarray(imfilename),origin='lower left',alpha=alpha)
+        for k in theta_dict.keys():
+            ax.text(theta_dict[k][2],yidx,k, rotation = 90.) #plot index
+            ax.text(theta_dict[k][2],yang,np.round(theta_dict[k][1],2),rotation=90.) #plot index
+        fig.show()
+
+    if plot_angle: #plot angle vs line index
+        fig,ax=plt.subplots()
+        ax.scatter(xidx,np.abs(alltheta))
+        #ax.plot(xidx,np.abs(alltheta))
+        ax.scatter(onex,onetheta,c='r',marker='+')
+        ax.set_xlabel('Edge index')
+        ax.set_ylabel('Orientation of Edge (degrees)')
+        ax.set_xlim([0,len(xl_int)])
+        fig.show()
+    return theta_dict,onex,onetheta
+
+def plot_theta_by_idx(window,nmin=0,nmax=False,line=False,write=False):
+    edges=glob.glob('window00'+str(window)+'*corrected_edges.p')
+    hough=glob.glob('window00'+str(window)+'*hough.p')
+    ad,axx,colors=[],[],[]
+    c18=['k','r','g','c','m','y','b','grey','lightcoral','darkorange','yellow','lawngreen','turquoise','dodgerblue','blueviolet','orange','purple','navy']
+    if not nmax:
+        nmax=len(edges)
+    esub=edges[nmin:nmax]
+    hsub=hough[nmin:nmax]
+    for e,h in zip(esub,hsub):
+        ld,xidx,atheta=angle_by_index(pickle.load(open(h,'rb')),xpeak_int=e)
+        ad.append(atheta)
+        axx.append(xidx)
+
+    nn=len(ad)
+    allarr=np.zeros([nn,len(xidx)])
+    for n in range(0,nn):
+        allarr[n,:]=np.array(ad[n])
+        colors.append(c18[n])#(float(n)/(384./float(nn)),(float(nn-n)/(255./float(nn))),(float(n)/(255./float(nn)))))
+    #print colors
+    #colors=np.random.random((len(ad),3))
+    meanarr=np.mean(allarr,axis=0)
+    fig,ax=plt.subplots()
+    for i,x,a,c in zip(range(0,nn),axx,ad,colors):
+        ax.scatter(x,a,alpha=.6,c=c,label='Image '+str(nmin+i))
+        if line:
+           ax.plot(x,a,c=c)
+    ax.scatter(x,meanarr,marker='+',c='r',label='Mean')
+    ax.plot(x,meanarr,c='r',linewidth=4)
+    ax.set_xlim([0,len(x)])
+    ax.set_ylim([87.5,90.1])
+    ax.set_xlabel('Edge index')
+    ax.set_ylabel('Angle (degrees)')
+    ax.legend(loc='lower right')
+    ax.set_title('Window ' + str(window))
+    fig.show()
+
+    if write: #write to a csv
+        rows=[]
+        row0=['Edge Index'] #header row
+        for n in range(nmin,nmax):
+            row0.append('Image '+str(n))
+        row0.append('Mean')
+        rows.append(row0)
+        transarr=np.transpose(allarr)
+        for i in range(0,len(meanarr)):
+            foo=['Edge ' + str(i)]
+            foo.extend(list(transarr[i,:]))
+            foo.append(meanarr[i])
+            rows.append(foo)
+        with open('window00'+str(window)+'angle_idx.csv',mode='w') as outfile:
+            writer=csv.writer(outfile, delimiter=',')#,quotechar='"')
+            for row in rows:
+                writer.writerow(row)
+
 def anisotropic_diffusion(filepath):
     Dimension = 2
     PixelType = itk.ctype('float')
@@ -452,12 +744,12 @@ def Canny_edge(filen,sigma=3,mag=5.0,anisotropic=False,binary=False,gauss=False,
         imarr=im2ndarray(filen)
 
     #im = exposure.equalize_hist(imarr)    #should probably do this AFTER removing the edges...
-    if mag==5.0:
-        im=remove_edges(filen,imarr)
-    elif mag ==15.0:
-        im=remove_edges(filen,imarr,maxx='12',maxy='16')
-    else:
-        im=imarr
+    #if mag==5.0:
+    #    im=remove_edges(filen,imarr)
+    #elif mag ==15.0:
+    #    im=remove_edges(filen,imarr,maxx='12',maxy='16')
+    #else:
+    im=imarr
 
     #for the finest grids, use sigma=2
     #windex,foo=get_index(filen)
@@ -473,9 +765,9 @@ def Canny_edge(filen,sigma=3,mag=5.0,anisotropic=False,binary=False,gauss=False,
     if anisotropic:
         im=anisotropic_diffusion(filen)
 
-    p2 = np.percentile(im, 2)
-    p98 = np.percentile(im, 98)
-    im = exposure.rescale_intensity(im, in_range=(p2, p98))
+    #p2 = np.percentile(im, 2)
+    #p98 = np.percentile(im, 98)
+    #im = exposure.rescale_intensity(im, in_range=(p2, p98))
 
     if gauss:
         im = ndi.gaussian_filter(im, gauss)
@@ -540,7 +832,8 @@ def clean_centers(edges,cfac=False,tolerance=False,plot=False,sigma=2.):
         else:
             ax.axhline(tolerance,c='k',linestyle='--')
         ax.legend(loc='upper right')
-        ax.set_xlim([0,len(cfac)])
+        if type(cfac) != bool:
+            ax.set_xlim([0,len(cfac)])
         fig.show()
     return cleaned_edges
 
@@ -582,6 +875,7 @@ def plot_centers_and_edges(win,p0,ang,earr=False, datafile=False,tol=2.0,cfac=Fa
     ax.set_xlim([0,len(cleaned_sum)])
     ax.set_ylim([0,np.max(esum)])
     fig.show()
+
 
 def sum_peaks(cleaned_edges, tol=9,irange=False):#irange=[1087,1105]):
     '''Get the locations of the peaks of a (Gaussian?) fit to the histogram of sums, return these as the width array. Tolerance is number of False allowed between Trues to still be considered a group'''
@@ -715,31 +1009,85 @@ def get_im_rot_angle(edges,testrot=True):
         fig.show()
         return aa,bb,rotedges
 
+def imgrad_from_file(imfile,isum=False, imean=False):
+    im=np.array(Image.open(imfile))
+    imsum=np.sum(im,axis=0)
+    immean=np.mean(imsum)
+    imgrad=np.gradient(imsum)
+    ret={"imgrad":imgrad,"imsum":False,"immean":False}
+    if isum:
+      ret["imsum"]=imsum
+    if imean:
+      ret["immean"]=immean
+    return ret
 
-def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,stats=True,gauss=False,tolerance=False,n=9,quiet=True):
+# def edges_to_centers(cleaned_edges,imfile,n=9):
+#     '''Additional function to be executed before sum_peaks. Finds each slit center from the edge pairs'''
+#     #do I need to run rising_or_falling first then? probably....
+#     xpeak_int=[int(x) for x in xpeak]
+#     xpeak_int.sort()
+
+#     imdict=imgrad_from_file(imfile,imean=True)
+#     imgrad=imdict["imgrad"]
+
+#     rising, falling,_,_,_=rising_or_falling_final(xpeak,xpeak_int,imgrad,n=n)
+
+#     #maybe just mod rising_or_falling_final to return centers as well
+
+
+def get_xpeaks(rang,rotim,rotarr,im,ef,sigma=2.,tol=9,plot=False):
+    #now clean edges of the rotated arrays?
+    carray=np.ones(np.shape(rotim))
+    carr=np.sum(carray,axis=0)
+    cleaned_edges=clean_centers(rotarr,cfac=carr, sigma=sigma,plot=plot) #make the cutoff line follow a curve determined by the local maxima? Or smooth the array ... idk
+    #then group edges together using group_edges_by_idx (I think)
+    xpeak=sum_peaks(cleaned_edges, tol=tol,irange=False)
+    xpeak_int=[int(x) for x in xpeak]
+    xpeak_int.sort()
+    if plot:
+        fig,ax=plt.subplots()
+        ax.imshow(rotarr,origin='lower',alpha=1,cmap=cm.Reds)
+        ax.imshow(rotim,origin='lower',alpha=.5,cmap=cm.Greys)
+        fig.show()
+        pickle.dump([xpeak,xpeak_int],open('testpeaks.p','wb'))
+        #plot_centers_and_edges(fname=im,datafile=,tol=2.0,cfac=False)
+    return xpeak,xpeak_int
+
+
+def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,stats=True,gauss=False,tolerance=False,n=9,quiet=True,example=True,sigma=2.,rang=False):
     '''basically same as slit_or_slat() plus histogramming'''
     #if not ang:
     check=False
     p0ang=imfile[6:imfile.rfind('_')]
     #else:
     #    p0ang=ang
-    im=np.array(Image.open(imfile))
-    imsum=np.sum(im,axis=0)
-    immean=np.mean(imsum)
-    imgrad=np.gradient(imsum)
+    imdict=imgrad_from_file(imfile,imean=True)
+    #imsum=np.sum(im,axis=0)
+    immean=imdict["immean"]
+    imgrad=imdict["imgrad"]
     #imgrad2=np.gradient(imgrad)
     #gradpeaks=(np.roll(np.sign(imgrad2),1)-np.sign(imgrad2) !=0).astype(int) #locations where the gradients peak
     #gx=np.where(gradpeaks !=0)[0]
+    if (example and p0ang =="p5_0") or plot:
+        tplot=True
+    else:
+        tplot=False
     if not xpeak:
         efile=glob.glob(imfile[:-4]+'_edges.p')
         if len(efile) > 0:
             edges=pickle.load(open(efile[0],'rb'))
         else:
             edges,_=Canny_edge(imfile,sigma=3,gauss=gauss,plot=False,mag=False)
-        cleaned_edges=clean_centers(edges,sigma=tolerance)
-        xpeak=sum_peaks(cleaned_edges,tol=n)
-
-    xpeak_int=[int(x) for x in xpeak]
+        #cleaned_edges=clean_centers(edges,sigma=tolerance)
+        #xpeak=sum_peaks(cleaned_edges,tol=n,plot=plot)
+    if rang:
+        rotim=rotate(im2ndarray(imfile),rang,reshape=True)
+        rotarr=rotate(edges,rang,reshape=True)
+    else:
+        rotim=im2ndarray(imfile)
+        rotarr=edges
+    xpeak,xpeak_int=get_xpeaks(rang,rotim,rotarr,imfile,efile,sigma=sigma,tol=n,plot=tplot)
+    #xpeak_int=[int(x) for x in xpeak]
     xpeak_int.sort()
 
 #     #insert dummy peaks based on gx. EXCLUDE these from the rising/falling analysis
@@ -757,8 +1105,12 @@ def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,s
 #             mask.append(True)
 
     #determine if edges are rising or falling
+    #rising,falling,periodr,periodf,period,width,cIvals,cAvals
 
-    rising, falling, periodr,periodf,periods=rising_or_falling_final(xpeak,xpeak_int,imgrad,n=n)
+    rising, falling, periodr,periodf,period,width,cIvals,cAvals=rising_or_falling_final(xpeak,xpeak_int,imgrad,n=n,centers=True,xray=True)
+    if tplot:
+        from analyze_optical import plot_peaks_and_points
+        plot_peaks_and_points(xpeak,rising, falling, cIvals,cAvals)
     if plot:
         #make the histogram
         fig,ax=plt.subplots()
@@ -775,26 +1127,37 @@ def slit_widths_from_peaks(window_num,imfile,xpeak=False,pix2um=.65,plot=False,s
         avg=np.mean(period) #here period is slit width ...what if I want to plot the actual period?
         med=np.median(period)
         stdv=np.std(period)
+        avgw=np.mean(width)
+        medw=np.median(width)
+        stdvw=np.std(width)
         if stdv >=1.:
             check=True
         statfile='win'+str(window_num)+'_width_stats_'+p0ang+'.p'
         datafile='win'+str(window_num)+'_width_data_'+p0ang+'.p'
         print "-------------------STATISTICS FOR WINDOW "+str(window_num)+"---------------------"
-        print '              Mean: ' + str(avg)
-        print '            Median: ' + str(med)
-        print 'Standard Deviation: ' + str(stdv)
+        print '              Mean P: ' + str(avg)
+        print '            Median P: ' + str(med)
+        print 'Standard Deviation P: ' + str(stdv)
+        print '              Mean W: ' + str(avgw)
+        print '            Median W: ' + str(medw)
+        print 'Standard Deviation W: ' + str(stdvw)
         print 'Results saved in ' + statfile
-        data={'period':period,'rising':rising,'falling':falling,'widths':width}
-        stdict={'mean':avg,'median':med,'stddev':stdv}
+        data={'period':period,'rising':rising,'falling':falling,'widths':width,'cIvals':cIvals,'cAvals':cAvals}
+        stdict={'meanp':avg,'medianp':med,'stddevp':stdv,'meanw':avgw,'medianw':medw,'stddevw':stdvw}
         pickle.dump([stdict,tolerance,n],open(statfile,'wb'))
         pickle.dump(data,open(datafile,'wb'))
 
-    return period,width,check
+    return periodr,periodf,period,width,cAvals,cIvals,check
 
-def rising_or_falling_final(xpeak,xpeak_int, imgrad,n=9, quiet=True,filter_multiples=True,filter_nominal=False):
-    rising=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imgrad[xpeak_int[i]-1:xpeak_int[i]+2]) > 0.] #take 3 pix around xpeak
+def rising_or_falling_final(xpeak,xpeak_int, imgrad,n=9, quiet=True,filter_multiples=True,filter_nominal=False, centers=False,xray=False):
+    if xray: #this is reverse for x-ray and optical; for xray, light indicates slat. therefore rising => dark to light
+        rising=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imgrad[xpeak_int[i]-1:xpeak_int[i]+2]) > 0.] #take 3 pix around xpeak
     #need xpeaks to be integers now
-    falling=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imgrad[xpeak_int[i]-1:xpeak_int[i]+2]) < 0.]
+        falling=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imgrad[xpeak_int[i]-1:xpeak_int[i]+2]) < 0.]
+    else:
+        rising=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imgrad[xpeak_int[i]-1:xpeak_int[i]+2]) < 0.] #take 3 pix around xpeak
+    #need xpeaks to be integers now
+        falling=[xpeak[i] for i in range(0,len(xpeak)-1) if np.mean(imgrad[xpeak_int[i]-1:xpeak_int[i]+2]) > 0.]
 
     if not quiet:
         print "First falling: ",falling[0]
@@ -821,8 +1184,8 @@ def rising_or_falling_final(xpeak,xpeak_int, imgrad,n=9, quiet=True,filter_multi
     masterlist.extend(falling)
     locs, rorf = (list(t) for t in zip(*sorted(zip(masterlist, rlist)))) #list of x-coordinates and list of rising or falling codes (1 or 0)
 
-    width, periodr,periodf=[],[],[]
-    #now get the widths
+    width,cIvals,cAvals,periodr,periodf=[],[],[],[],[]
+    #now get the widths and centers
     for i,loc,code in zip(range(0,len(locs[:-2])),locs[:-2],rorf[:-2]):
         testsum=code+rorf[i+1]
         if testsum == 2 and locs[i+1]-loc >n: #two r's
@@ -830,10 +1193,14 @@ def rising_or_falling_final(xpeak,xpeak_int, imgrad,n=9, quiet=True,filter_multi
         elif testsum == 1: #r and f (but in what order?)
             if code ==1: #r then f
                 width.append(locs[i+1]-loc)
+                if centers:
+                    cAvals.append((locs[i+1]-loc)/2. + loc) #slat centers, not slit centers
                 if code+rorf[i+2]==2 and locs[i+2]-loc >n:
                     periodr.append(locs[i+2]-loc)
             elif code+rorf[i+2]==0 and locs[i+2]-loc >n: #f then r then f
                 periodf.append(locs[i+2]-loc)
+                if centers:
+                   cIvals.append((locs[i+1]-loc)/2. + loc) #slit centers
         elif testsum == 0 and locs[i+1]-loc >n: #f and f
             periodf.append(locs[i+1]-loc)
 
@@ -859,9 +1226,105 @@ def rising_or_falling_final(xpeak,xpeak_int, imgrad,n=9, quiet=True,filter_multi
         width=np.ma.masked_greater(width,.75*filter_nominal) #should I also mask when less than?
         width=np.ma.masked_less(width,0.25*filter_nominal) #should I also mask when less than?
 
-    return rising,falling,periodr,periodf,period,width
+    return rising,falling,periodr,periodf,period,width,cIvals,cAvals
+
+def do_filter_nominal(period,npitch,fac=2.):
+    '''periods already in um '''
+    period.sort()
+    try:
+        lbound=np.where(np.array(period) < (1.-(fac-1.))*npitch)[0][-1]
+    except IndexError:
+        lbound=0
+    try:
+        ubound=np.where(np.array(period) > fac*npitch)[0][0]
+    except IndexError:
+        ubound=-1
+    print(lbound, ubound, period[lbound],period[ubound])
+    filtered_periods=period[lbound+1:ubound]
+    multiples=period[ubound:]
+    return filtered_periods, multiples
+
+def do_filter_multiples(multiples,npitch,frac=.05):
+    '''examine outliers from do_filter_nominal to see if they're multiples'''
+    #take modulus?
+    maxmult=int(multiples[-1]/npitch) #multiples already sorted
+    mults=[m for m in multiples if m % npitch <= frac*npitch]
+    #now divide them all properly?
+    #print mults
+    filtered_mults=[]
+    for n in range(2,maxmult+1):
+        for m in mults:
+            #print m/n, n
+            if m/n > (1.-frac)*npitch and m/n < (1.+frac)*npitch:
+                filtered_mults.append(m/n)
+    return filtered_mults
+
+def slit_widths_from_centers(centers,npitch,centers2=False,pix2um=1.995,stats=False,plot=False,filter_nominal=False):
+    '''basically same as slit_widths_from_peaks(). should actually streamline that one to take keyword center'''
+    period=[]
+    #centers is a vector of the float positions of slat centers. use these to find period now
+    for n,c in enumerate(centers[:-1]):
+      period.append(centers[n+1]-c)
+
+    if type(centers2) != bool: #also have slit centers, not just slat centers
+        period2=[]
+        for n,c in enumerate(centers2[:-1]):
+            period2.append(centers2[n+1]-c)
+
+    if filter_nominal: #get rid of anything 2x or more of nominal -- note that this is currently only a > filter
+        filtered_periods=do_filter_nominal(period,npitch,pix2um)
+        if type(centers2) != bool:
+            filtered_periods2=do_filter_nominal(period2,npitch,pix2um)
+    else:
+        filtered_periods=[]
+        filtered_periods2=[]
+    #flatten arrays...
+    if len(filtered_periods)!=0:
+        filtered_periods=np.hstack(filtered_periods)
+        filtered_periods2=np.hstack(filtered_periods2)
+
+
+
+    if plot:
+        #make the histogram
+        fig,ax=plt.subplots()
+        bins=np.arange(np.min(period),np.max(period),np.std(period)/5.)
+        ax.hist(period,bins, aplha=0.6, facecolor='g',label='Period from Slat Centers')
+        if type(centers2) != bool:
+            ax.hist(period2,bins, aplha=0.6, facecolor='m',label='Period from Slit Centers')
+        #ax.set_xlim([nperiod-5,nperiod+5])
+        ax.set_yscale('log')
+        ax.set_ylim([1,len(period)])
+        ax.legend()
+        #figfilename='win'+str(window_num)+'_group_periods'+str(mag)+'.png'
+        #fig.savefig(figfilename)
+        fig.show()
+
+    if stats: #print out and pickle stats
+        avg=np.mean(period) #here period is slit width ...what if I want to plot the actual period?
+        med=np.median(period)
+        stdv=np.std(period)
+        print "-------------------STATISTICS FOR WINDOW---------------------"
+        print '              Mean: ' + str(avg)
+        print '            Median: ' + str(med)
+        print 'Standard Deviation: ' + str(stdv)
+        if type(centers2) != bool:
+            #print 'Results saved in ' + statfile
+            avg=np.mean(period2) #here period is slit width ...what if I want to plot the actual period?
+            med=np.median(period2)
+            stdv=np.std(period2)
+            print "-------------------STATISTICS FOR WINDOW---------------------"
+            print '              Mean: ' + str(avg)
+            print '            Median: ' + str(med)
+            print 'Standard Deviation: ' + str(stdv)
+
+    if type(centers2) != bool:
+        return period, filtered_periods, period2, filtered_periods2
+    else:
+        return period, filtered_periods
 
 def print_all_stats(win):
+    '''what it says on the tin. need to update tho...'''
     statfiles=glob.glob('win'+str(win) + '*_stats*'+'.p')
     for st in statfiles:
         stdict=pickle.load(open(st,'rb'))
@@ -873,6 +1336,23 @@ def print_all_stats(win):
         print '            Median: ' + str(med)
         print 'Standard Deviation: ' + str(stdv)
         print 'Results saved in ' + st
+        #check in tags for other stats...
+        #{'mean':avg,'median':med,'stddev':stdv,'wmean':np.ma.mean(widths),'wmed':np.ma.median(widths),'wdev':np.ma.std(widths),'amean':np.mean(filtered_c),'amed':np.median(filtered_c),'adev':np.std(filtered_c),'imean':np.mean(filtered_c2),'imed':np.median(filtered_c2),'idev':np.std(filtered_c2)}
+        if 'wmean' in stdict.keys():
+            print '             Total Widths: ' + str(len(stdict['wmean']))
+            print '              Mean Widths: ' + str(stdict['wmean'])
+            print '            Median Widths: ' + str(stdict['wmed'])
+            print 'Standard Deviation Widths: ' + str(stdict['wdev'])
+        if 'amean' in stdict.keys():
+            print '             Total Period (slat centers): ' + str(len(filtered_c))
+            print '              Mean Period (slat centers): ' + str(np.mean(filtered_c))
+            print '            Median Period (slat centers): ' + str(np.median(filtered_c))
+            print 'Standard Deviation Period (slat centers): ' + str(np.std(filtered_c))
+        if 'imean' in stdict.keys():
+            print '             Total Period (slit centers): ' + str(len(filtered_c2))
+            print '              Mean Period (slit centers): ' + str(np.mean(filtered_c2))
+            print '            Median Period (slit centers): ' + str(np.median(filtered_c2))
+            print 'Standard Deviation Period (slit centers): ' + str(np.std(filtered_c2))
 
 
 def reEdge(filen,sigma=3,gauss=3,plot=True):
@@ -898,7 +1378,7 @@ def im_peek(filen,mag=5.0,length=0.2,contrast_stretch=False):
     if mag==5.0:
         pix2um=(1.2512/640.)*1000.
     else:
-        pix2um=0.6
+        pix2um=0.65
     #edges=pickle.load(open(filen,'rb'))
     #imf=filen[:-8]+'.tif'
     im=im2ndarray(filen)
@@ -924,13 +1404,13 @@ def edge_peek(filen,mag=5.0,length=0.2):
     if mag==5.0:
         pix2um=(1.2512/640.)*1000.
     else:
-        pix2um=0.6
+        pix2um=0.65
     edges=pickle.load(open(filen,'rb'))
     imf=filen[:-8]+'.tif'
     im=im2ndarray(imf)
     fig, ax = plt.subplots(1, 1, figsize=(7, 6))
-    ax.imshow(im, cmap=cm.gray)
-    ax.imshow(np.ma.masked_where(edges == 0,edges),cmap=cm.autumn)
+    ax.imshow(im, cmap=cm.gray,alpha=0.4)
+    ax.imshow(np.ma.masked_where(edges == 0,edges),cmap=cm.winter)
     scalebar = ScaleBar(pix2um,'um', SI_LENGTH,length_fraction=length) # 1 pixel = 0.2 meter
     #print scale*pix2um
     ax.add_artist(scalebar)
@@ -948,7 +1428,7 @@ def hough_peek(filen,edgef=False,mag=5.0,length=0.2):
     if mag==5.0:
         pix2um=(1.2512/640.)*1000.
     else:
-        pix2um=0.6
+        pix2um=0.65
 
     edata=pickle.load(open(edgef,'rb'))
     fig, ax = plt.subplots(1, 1, figsize=(7, 6))
@@ -969,7 +1449,12 @@ def extend_line(line,shape=[640,480],plot=False):
     start=line[0]
     end=line[1]
     dxs,dys=shape[0]-start[0],shape[1]-start[1] #offsets from origin
-    slope = (np.float(end[1])-np.float(start[1]))/(np.float(end[0])-np.float(start[0])) #*-1 ?
+    deltax=np.float(end[0])-np.float(start[0])
+    deltay=np.float(end[1])-np.float(start[1])
+    if deltax == 0.0:
+        slope = 90.
+    else:
+        slope = deltay/deltax #*-1 ?
     #make a line with this slope, passing through start and end, that extends over the whole frame. Get endpoints...
     #if dxs >= shape[0]/2 and dys <=shape[1]/2: #look closer to bottom right corner...assume all slopes are +-45 degrees
     xvec=np.arange(0,shape[0],1)
@@ -1006,77 +1491,173 @@ def extend_line(line,shape=[640,480],plot=False):
 
     return extended_line#,xvec,y2
 
-def same_line(lines,tol=3, plot=False):
-    """Test if two or more Hough line segments lie on the same line. Returns lists of line segments that fall on the same line, within a certain tolerance at the endpoints"""
-    extended_lines,matches,singles=[],[],[]
-    duplicate=False
+def same_line(lines,nang,tol=3, plot=False):
+    ''' rotate all line endpoints, see which ones lie on the same vertcal axis, group, return groups'''
+    theta=np.radians(nang)
+    c,s=np.cos(theta),np.sin(theta)
+    rmat= np.array(((c,-s),(s,c)))#rotation matrix
+    lx1,lx2=[],[]
     for line in lines:
         start=line[0]
         end=line[1]
-        extended_lines.append(extend_line(line)) #extend the line as far as it can go within the boundaries of the frame
+        lx1.append(rmat.dot(start)[1]) #xcoord only
+        lx2.append(rmat.dot(end)[1])
+    #going to assume each entry in lx1 and lx2 more or less stack up...
+    #or use average
+    lx1e=np.transpose(zip(lx1,range(0,len(lx1))))
+    lx2e=np.transpose(zip(lx2,range(0,len(lx2))))
+    #sort by lx1 or lx2
+    lx1s=np.transpose(sorted(lx1e,key=lambda x:x[0])) #sorts by x coord, index carried along
+    lx2s=np.transpose(sorted(lx2e,key=lambda x:x[0]))
 
-    #now test extended lines against each other
-    allxl=[(l[0][0],l[1][0]) for l in lines]
-    allyl=[(l[0][1],l[1][1]) for l in lines]
-    allx=[(exl[0][0],exl[1][0]) for exl in extended_lines]
-    #ally=[(exl[0][1],exl[1][1]) for exl in extended_lines]
-    for l,exl in zip(lines,extended_lines):
-        #pad the endpoints in x
-        ex1=exl[0]
-        ex2=exl[1]
-        if ex1[0]-tol/2 > 0:
-            padded_ex1=range(ex1[0]-tol/2,ex1[0]+tol/2,1)
-        else:
-            padded_ex1=range(ex1[0],ex1[0]+tol,1)
-        if ex2[0]+tol/2 > 0:
-            padded_ex2=range(ex2[0]-tol/2,ex2[0]+tol/2,1)
-        else:
-            padded_ex2=range(ex2[0],ex2[0]+tol,1)
-        #test if any other lines fall on the extended line, ie if any in allx are in padded_ex
-        #print padded_ex1,padded_ex2
-        for m in matches:
-            if l in m:
-                duplicate=True
-                #print l,m, duplicate
-            else:
-                duplicate = False
-                #print l,m, duplicate
-        if duplicate == False:
-            matches.append([((xl[0],yl[0]),(xl[1],yl[1])) for x,xl,yl in zip(allx,allxl,allyl) if x[0] in padded_ex1 and x[1] in padded_ex2]) #now need to append the actual line segments associated with the extended lines
-    for m in matches:
-        if len(m) == 1: #find singles
-            singles.append(m)
-            matches.remove(m)
-    #print len(singles)
-
+    #now group within tol -- code copied from same_vert_line
     unique_matches=[]
-    for m in matches: #now matches doesn't contain any singles
-        if m not in unique_matches:
-            unique_matches.append(m)
-            for s in singles:
-                #print s,m
-                if s[0] in m:
-                    singles.remove(s)
-                    #print s,m
-    #print len(singles)
-    for s in singles:
-        unique_matches.append(s)
+    for lx1,lx2 in zip(lx1s,lx2s):
+        lx1x,lidx1=lx1
+        lx2x,lidx2=lx2
+        if abs(lx1x-lx2x) > tol: #need a bigger tolerance if the angle is so big!
+            ltol=abs(lx1x-lx2x)
+        else:
+            ltol=tol
+        try:
+            xm,midx=unique_matches[-1][0] #latest unique match
+            farthest_x=np.max([np.abs(xm-lx1x),np.abs(xm-lx2x)])
+            #print line, to_match
+            #print farthest_x,closest_y
+            if farthest_x <= tol: #must be on the same edge
+                unique_matches[-1].append(lx1)
+            else:
+                unique_matches.append([lx1])
 
-        #if so, ...group and return
+        except IndexError: #empty list
+            unique_matches.append([lx1]) #this is just the indexes
 
-    if plot:
+    #now re-match line to group
+    grouped_lines=[]
+    for um in unique_matches:
+        if um[0][0].is_integer():
+            idx=0
+        else:
+            idx=1
+        grouped_lines.append([lines[int(u[idx])] for u in um])
+    return grouped_lines
+
+
+
+# def same_line(lines,tol=3, plot=False,shape=[640,480]):
+#     """Test if two or more Hough line segments lie on the same line. Returns lists of line segments that fall on the same line, within a certain tolerance at the endpoints"""
+#     extended_lines,matches,singles=[],[],[]
+#     duplicate=False
+#     for line in lines:
+#         start=line[0]
+#         end=line[1]
+#         extended_lines.append(extend_line(line,shape=shape)) #extend the line as far as it can go within the boundaries of the frame
+
+#     #now test extended lines against each other
+#     allxl=[(l[0][0],l[1][0]) for l in lines]
+#     allyl=[(l[0][1],l[1][1]) for l in lines]
+#     allx=[(exl[0][0],exl[1][0]) for exl in extended_lines]
+#     #ally=[(exl[0][1],exl[1][1]) for exl in extended_lines]
+#     for l,exl in zip(lines,extended_lines):
+#         #pad the endpoints in x
+#         ex1=exl[0]
+#         ex2=exl[1]
+#         if ex1[0]-tol/2 > 0:
+#             padded_ex1=range(ex1[0]-tol/2,ex1[0]+tol/2,1)
+#         else:
+#             padded_ex1=range(ex1[0],ex1[0]+tol,1)
+#         if ex2[0]+tol/2 > 0:
+#             padded_ex2=range(ex2[0]-tol/2,ex2[0]+tol/2,1)
+#         else:
+#             padded_ex2=range(ex2[0],ex2[0]+tol,1)
+#         #test if any other lines fall on the extended line, ie if any in allx are in padded_ex
+#         #print padded_ex1,padded_ex2
+#         for m in matches:
+#             if l in m:
+#                 duplicate=True
+#                 #print l,m, duplicate
+#             else:
+#                 duplicate = False
+#                 #print l,m, duplicate
+#         if duplicate == False:
+#             matches.append([((xl[0],yl[0]),(xl[1],yl[1])) for x,xl,yl in zip(allx,allxl,allyl) if x[0] in padded_ex1 and x[1] in padded_ex2]) #now need to append the actual line segments associated with the extended lines
+#     for m in matches:
+#         if len(m) == 1: #find singles
+#             singles.append(m)
+#             matches.remove(m)
+#     #print len(singles)
+
+#     unique_matches=[]
+#     for m in matches: #now matches doesn't contain any singles
+#         if m not in unique_matches:
+#             unique_matches.append(m)
+#             for s in singles:
+#                 #print s,m
+#                 if s[0] in m:
+#                     singles.remove(s)
+#                     #print s,m
+#     #print len(singles)
+#     for s in singles:
+#         unique_matches.append(s)
+
+#         #if so, ...group and return
+
+#     if plot:
+#         fig,ax=plt.subplots()
+#         scale=len(unique_matches)
+#         for i,mm in enumerate(unique_matches):
+#             for m in mm:
+#                 s1=m[0]
+#                 e1=m[1]
+#                 ax.plot((s1[0],e1[0]),(s1[1],e1[1]),color=cm.jet(float(i)/float(scale)))
+#                 #ax.plot((s1[0],e1[0]),(s1[1],e1[1]),'r--')
+#             #print i/10.,cm.jet(i/10.)
+#         fig.show()
+
+#     return unique_matches
+
+def same_vert_line(lines,tol=2,ytol=50,plot_hist=False):
+    '''specifically for vertical or near-vertical lines'''
+    unique_matches=[]
+    all_angles=[]
+    for line in lines:
+        angle=np.abs(get_angle(line))
+        x0,y0=line[0]
+        x1,y1=line[1]
+        if x1-x0 > tol: #need a bigger tolerance if the angle is so big!
+            ltol=x1-x0
+        else:
+            ltol=tol
+        try:
+            to_match=unique_matches[-1] #latest unique match
+            last_ang=all_angles[-1]
+            xm0,ym0=to_match[0][0]
+            xm1,ym1=to_match[0][1]
+            farthest_x=np.max([np.abs(xm1-x1),np.abs(xm0-x0)])
+            closest_y=np.min([np.abs(ym1-y1),np.abs(ym0-y0)])
+            #print line, to_match
+            #print farthest_x,closest_y
+            if farthest_x <= ltol and closest_y > ytol: #must be on the same edge
+                unique_matches[-1].append(line)
+                all_angles[-1].append(angle)
+            else:
+                unique_matches.append([line])
+                all_angles.append([angle])
+
+        except IndexError: #empty list
+            unique_matches.append([line])
+            all_angles.append([angle])
+
+    if plot_hist:
         fig,ax=plt.subplots()
-        scale=len(unique_matches)
-        for i,mm in enumerate(unique_matches):
-            for m in mm:
-                s1=m[0]
-                e1=m[1]
-                ax.plot((s1[0],e1[0]),(s1[1],e1[1]),color=cm.jet(float(i)/float(scale)))
-                #ax.plot((s1[0],e1[0]),(s1[1],e1[1]),'r--')
-            #print i/10.,cm.jet(i/10.)
+        for i,a in enumerate(all_angles):
+            for eacha in a:
+                ax.scatter(i,eacha)
+            ax.scatter(i,np.mean(a),marker='+',c='r')
+        ax.set_xlim([0,len(all_angles)])
         fig.show()
+    return all_angles,unique_matches
 
-    return unique_matches
 
 def rising_or_falling(rotim,rotarr,immean,plot=False,imfile=False,shape=False,rerotate=False, test=False):
     """Determine if an edge is rising (dark -> light) or falling (light -> dark). Return indexed mask"""
@@ -1788,11 +2369,13 @@ def cat_hough(window_num, imtags='X_', tags=['ll150','ll200','ll250','ll300'],we
     if not EM:
         ofiles=glob.glob('win'+str(window_num)+'_*'+str(mag)+imtags+'edges.p')
     else:
-        ofiles=EM_list(str(window_num),str(mag),ending='_edges.p')
+        ofiles=EM_list(str(window_num),str(mag),ending='edges.p')
     idxs=[get_index(o)[1] for o in ofiles]
+    #print ofiles[0]
     #all_lines=[]
     for idx in idxs:
         basen='win'+str(window_num)+'_'+str(idx[0])+'_'+str(idx[1])+'_'+str(mag)+imtags+'hough'
+        #print basen
         all_lines=[]
         #lines=pickle.load(open(basen+'.p','rb'))
         #print len(lines)
@@ -1828,7 +2411,7 @@ def hough_hist(lines, windownum, nang, mag=5.0,log=True,ret=False, title=False,x
             lines=all_lines
         if i < len(llist)-1:
             if sameline:
-                grouped_lines=same_line(l,tol=tol)
+                grouped_lines=same_line(l,nang,tol=tol)
                 for gl in grouped_lines:
                     theta.append(np.mean([get_angle(g) for g in gl]))
             else:
@@ -2008,8 +2591,13 @@ def get_angle(line):
     '''Get angle of line via tangent. Note that because the top left corner is 0,0 in the background image we multiply x's by -1'''
     deltax=-1.*(line[1][0]-line[0][0]) #removed -1.*
     deltay=line[1][1]-line[0][1]
-    theta=np.arctan(float(deltay)/float(deltax))  #np.arctan2(float(deltay)/float(deltax))
-    thetadeg=np.rad2deg(theta) #theta*180./np.pi
+    if np.abs(deltax)==0.0:
+        thetadeg=90.0
+    elif np.abs(deltay)==0.0:
+        thetadeg=0.
+    else:
+        theta=np.arctan(float(deltay)/float(deltax))  #np.arctan2(float(deltay)/float(deltax))
+        thetadeg=np.rad2deg(theta) #theta*180./np.pi
     return thetadeg
 
 def get_intersect(m1,m2,b1,b2):
@@ -2018,5 +2606,24 @@ def get_intersect(m1,m2,b1,b2):
     y=m1*x+b1
     return x,y
 
+def find_nearest(array, value,ret_idx=True):
+    ''' find closest value in array to given value'''
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    if ret_idx:
+        return idx,array[idx]
+    else:
+        return array[idx]
+
+def GW_angle_wrt_position(win,idx,ll=[50,100,150,200]):
+    for l in ll:
+        fn=glob.glob('window00'+str(win)+'_000'+str(idx)+'_flatdark_hough_ll'+str(l)+'.p')
+        lines=pickle.load(open(fn[0],'rb'))
+        theta=[get_angle(line) for line in lines]
+        hough_peek(fn[0],edgef=fn[0][:fn[0].rfind('_')-5]+'edges.p')
+        fig,ax=plt.subplots()
+        ax.scatter(range(0,len(theta)),theta)
+        ax.plot(range(0,len(theta)),theta)
+        fig.show()
 
 

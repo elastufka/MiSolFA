@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import scipy.constants as sc
 import pickle
 import itertools
+from CB_colors import CB_color_cycle as CB
 
 class Imager(object):
     '''Create the imager object. Read in the material transmission data and interpolate it to vectors of the same length. Calculate the transmission of each individual component and assign it to attributes.'''
@@ -30,7 +31,7 @@ class Imager(object):
                 slits=['Au','50']
                 substrate=['Si','250']
                 filled='Si'
-                detector=['CdTe','1000']            
+                detector=['CdTe','1000']
 
         if uworks ==True:
             try:
@@ -41,12 +42,12 @@ class Imager(object):
                 slits=['Au','200']
                 substrate=['C','500']
                 filled='Polymer'
-                detector=['CdTe','1000']                
+                detector=['CdTe','1000']
 
         if widget == False:
             self.attenuator = attenuator
             if attenuator:
-                self.attenuator = {'Material':attenuator[0],'Thickness':attenuator[1],'Transmission':1, 'Energy':[], 'eff_area':[]}      
+                self.attenuator = {'Material':attenuator[0],'Thickness':attenuator[1],'Transmission':1, 'Energy':[], 'eff_area':[]}
             self.slits = {'Material':slits[0], 'Thickness':slits[1],'Percent_area':0.5,'Transmission':[], 'Energy':[], 'eff_area':[]}
             self.substrate = {'Material':substrate[0], 'Thickness':substrate[1],'Substrate_area':1,'Transmission':[], 'Energy':[], 'eff_area':[]}
             self.filled = filled
@@ -71,7 +72,7 @@ class Imager(object):
                         print 'You forgot to select the '+att+'! Please choose again.'
                         done=False
                         break
-     
+
             self.attenuator = attenuator
             if w.Attenuator_Material!='None': # attenuator chosen
                 self.attenuator = {'Material':w.Attenuator_Material,'Thickness':w.Attenuator_Thickness,'Transmission':1, 'Energy':[], 'eff_area':[]}
@@ -102,10 +103,10 @@ class Imager(object):
             thicknesses.append(self.detector['Thickness'])
             array[1] = 1
         if self.filled:
-            filenames.append(self.substrate['Material']+'.csv') 
+            filenames.append(self.substrate['Material']+'.csv')
             thicknesses.append(self.slits['Thickness']) #thickness is the same as slit thickness
             array[2] = 1
-            
+
         energy = [[] for i in range(len(filenames))]
         a = [[] for i in range(len(filenames))]
         transmission=[[] for i in range(len(filenames))]
@@ -117,7 +118,7 @@ class Imager(object):
             energy[index] = data['E (keV)']
             a[index] = data['a (cm^2/g)']
             rho.append(data['rho (g/cm^3)'][0])
-            
+
             try:
                 transmission[index] = data['P(xi) (d='+thickness+' um)']
                 #print transmission[index][0:10]
@@ -135,7 +136,7 @@ class Imager(object):
 
         #make any adjustments and assign back to self
         self.substrate['Energy']=evector
-        self.slits['Energy']=evector   
+        self.slits['Energy']=evector
         self.substrate['Transmission']=tinterp[0]
         self.slits['Transmission']=tinterp[1]
         i=2
@@ -144,7 +145,7 @@ class Imager(object):
                 adict = getattr(self,p)
                 setattr(self,p,{'Transmission':tinterp[i],'Energy': evector, 'Material':adict['Material'],'Thickness':adict['Thickness']})
                 i=i+1
-                
+
         self.substrate['eff_area']=self.substrate['Substrate_area']*self.substrate['Transmission']
         self.slits['eff_area']=self.slits['Percent_area']*self.slits['Transmission']
         if attenuator:
@@ -155,14 +156,14 @@ class Imager(object):
         if detector:
             self.substrate['eff_area']=self.substrate['eff_area']*(1-self.detector['Transmission'])**2
             self.slits['eff_area']=self.slits['eff_area']*(1-self.detector['Transmission'])**2
-        self.eff_area = self.substrate['eff_area']- self.slits['eff_area']
+        self.eff_area = self.substrate['eff_area']+ self.slits['eff_area']
 
     def calc_transmission(self,a, rho, thickness):
         '''Make this seperate just in case'''
         thick=float(thickness)*10**-4
         transmission = [np.exp(-1*x*thick*rho) for x in a]
         return transmission
-                 
+
     def plot_eff_area(self): #should I make a plotting widget? possibly....
         '''Plot the effective area of the selected configuration.'''
         fig = plt.figure()
@@ -183,7 +184,7 @@ class Imager(object):
         ax1.legend(loc='upper right',fontsize='medium')
         ax1.plot()
         fig.show()
-        
+
     def plot_flare_counts(self,xlim=150,ylim=1000):
         '''Make the plot for if you have a small flare'''
         import flare_XR_dist as fd
@@ -193,15 +194,15 @@ class Imager(object):
         thth = np.interp(self.slits['Energy'],dist[0],dist[3])
 
         total_counts= prob*self.eff_area
-        thermal_counts= thth*self.eff_area 
+        thermal_counts= thth*self.eff_area
         nonthermal_counts= ntnt*self.eff_area
-    
+
         fig = plt.figure()
         ax1 = fig.add_subplot(111)    #ax1.ylog(energy, eff_area, color="b", label="Planck")
         ax1.semilogy(self.slits['Energy'], total_counts, color="r",label="total",linewidth='2')
         ax1.semilogy(self.slits['Energy'], thermal_counts, color="g",label="thermal")
         ax1.semilogy(self.slits['Energy'], nonthermal_counts, color="b",label="non-thermal")
-    
+
         plt.xlabel('Energy (keV)')
         plt.ylabel('Counts $s^{-1} keV^{-1}$')
         ax1.set_ylim([1,ylim])
@@ -212,15 +213,15 @@ class Imager(object):
 
     def print_config(self):
         '''print the relevant information about the imager'''
-        print 'Substrate:  ' + self.substrate['Thickness'] + ' um of ' + self.substrate['Material'] 
+        print 'Substrate:  ' + self.substrate['Thickness'] + ' um of ' + self.substrate['Material']
         print 'Slits:      ' + self.slits['Thickness'] + ' um of ' + self.slits['Material']
         #print self.attenuator
         #if self.attenuator:
         #    print 'Attenuator: ' + self.attenuator['Thickness'] + ' um of ' + self.attenuator['Material']
         #print self.detector
         #if self.detector:
-        #    print 'Detector:   ' + self.detector['Thickness'] + ' um of ' + self.detector['Material'] 
-  
+        #    print 'Detector:   ' + self.detector['Thickness'] + ' um of ' + self.detector['Material']
+
     def export2pickle(self, picklename):
         ''' Saves the data object in a .p file'''
         import pickle
@@ -230,7 +231,7 @@ class Imager(object):
         ''' Saves the data object in a .p file'''
         import pidly
         print 'foo'
-        
+
     def export2csv(self, csvname):
         ''' Saves the data object in a .p file'''
         d=self.__dict__

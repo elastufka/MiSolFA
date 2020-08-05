@@ -1,18 +1,19 @@
 
  #######################################
 # plot_divergent.py
-# Erica Lastufka 26/1/18  
+# Erica Lastufka 26/1/18
 # Make the widget for getting effective area plots for the grids
 #######################################
 
 #######################################
 # Usage:
 
-# 
+#
 ######################################
 
 from numpy import arange, sin, pi
 from matplotlib.figure import Figure
+import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import pickle
 import os
@@ -68,7 +69,7 @@ def plot_eff_period1d(pf=90., pr=90.,fang=45.,rang=45.,size=1.2,ycen_off=20,phas
     second_grid_periods=[y + pr_eff*(d_det/d2) for y in yvec]
     second_grid_offsets=[(d_det/d2)*y for y in yvec]
 
-    #convert into plottable... do I have to exend the mesh? probably.... 
+    #convert into plottable... do I have to exend the mesh? probably....
     #xvec=range(yvec[0],second_grid_offsets[-1],p/10.)
     xvec1=[o + p for o,p in zip(first_grid_offsets, first_grid_periods)]
     xvec2=[o + p for o,p in zip(second_grid_offsets, second_grid_periods)]
@@ -158,14 +159,14 @@ def plot_eff_period_seg(seg,phase=[0.,0.,0.,0.],size=1.2,duty=0.5, d1=50.,d2=55.
         fig.show()
     return first_grid_periods,second_grid_periods
 
-def plot_moire_fancy(moire_period,moire_orientation,titles=False,size=1.2,reflect=True):
+def plot_moire_fancy(moire_period,moire_orientation,titles=False,size=1.5,realsize=1.0,reflect=True,xaxoff=False,yaxoff=False):
     nplots = len(moire_period)
     mim,xoff,yoff=[],[],[]
     nsimple=[[0]]
     m,bext,b=[],[],[]
     for p,o in zip(moire_period,moire_orientation):
         #determine how big the array needs to be to fit when rotated and cropped
-        asize = 100.*size*(np.abs(np.cos(np.deg2rad(o)))+np.abs(np.tan(np.deg2rad(o)))) #mm/10
+        asize = np.sqrt(2.)*100.*size#*#(np.abs(np.cos(np.deg2rad(o))))#+np.abs(np.tan(np.deg2rad(o)))) #mm/10
         #print asize
         #off.append(100.*size*np.abs(np.cos(np.deg2rad(o)))#0)#int(size*100*abs(np.tan(np.deg2rad(o)))))#offset
         #draw x-axis vector such that you have 2pi every period
@@ -174,16 +175,17 @@ def plot_moire_fancy(moire_period,moire_orientation,titles=False,size=1.2,reflec
         if npds > 25:
             nsimple.append([1])
             #nplots=nplots-1
-            #print('Asking to plot ' + str(int(npds)) + ' periods! This will not end well...skipping')
+            print('Asking to plot ' + str(int(npds)) + ' periods! #This will not end well...skipping', p,o)
             mm,bb=plot_moire_simple(p,o,reflect=reflect)
             m.append(mm)
             b.append(bb[:])
-            if o < 90:
-                ex=[bb[-1]+cc for cc in bb[1:]]
-            else:
-                ex=[bb[1]-cc for cc in bb[1:]]                
-            bb.extend(ex)
-            bext.append(bb) #extend for better plotting
+            #if o < 90:
+            #    ex=[bb[-1]+cc for cc in bb[1:]]
+            #else:
+            #    ex=[bb[1]-cc for cc in bb[1:]]
+            #bb.extend(ex)
+            bext=bb
+            #bext.append(bb) #extend for better plotting
             continue
         print npts, npds
         xp = list(np.linspace(0,2*np.pi,npts))
@@ -208,76 +210,108 @@ def plot_moire_fancy(moire_period,moire_orientation,titles=False,size=1.2,reflec
             ang=o
         ##print 'rotated image size: ',np.shape(finim)
         #determine offsets for plotting
-        ydiff= np.abs(100.*size*np.tan(np.deg2rad(ang))*np.sin(np.deg2rad(ang)))
-        xdiff = np.abs(100.*size*np.cos(np.deg2rad(ang))*np.cos(np.deg2rad(ang)))
-        yoff.append(asize*np.abs(np.sin(np.deg2rad(ang))) - ydiff)
-        xoff.append(asize*np.abs(np.cos(np.deg2rad(ang))) - xdiff)
+        ydiff=100.*size#np.abs(100.*size*np.tan(np.deg2rad(ang))*np.sin(np.deg2rad(ang)))
+        xdiff=np.abs(100.*size*np.cos(np.deg2rad(ang))*np.cos(np.deg2rad(ang)))
+        yoff.append(50.*size*np.abs(np.tan(np.deg2rad(ang))))#asize*np.abs(np.sin(np.deg2rad(ang))) - ydiff)
+        xoff.append(asize*np.abs(np.cos(np.deg2rad(ang))) - xdiff) #asize*np.abs(np.cos(np.deg2rad(ang)))-50.*size)
         nsimple.append([0])
         #print xoff, yoff
     sumsimple=[i for i,j in enumerate(nsimple) if j[0] !=0]
-    
-    if nplots % 2 or nplots == 2:
+
+    if nplots == 2:
         fig,ax= plt.subplots(nplots)
         if type(ax) != np.ndarray:
             ax.imshow(mim[0],cmap='gray')
-            ax.set_xlim([xoff[0],int(size*100.)+xoff[0]])
-            ax.set_ylim([yoff[0],int(size*100.)+yoff[0]])
+            ax.axhline(yoff[0],xmin=xoff[0],xmax=int(size*100.)+xoff[0],color='b')
+            ax.axhline(int(size*100.)+yoff[0],xmin=xoff[0],xmax=int(size*100.)+xoff[0],color='b')
+            ax.axvline(xoff[0],ymin=yoff[0],ymax=int(size*100.)+yoff[0],color='b')
+            ax.axvline(xoff[0],ymin=yoff[0],ymax=int(size*100.)+yoff[0],color='b')
+            #ax.set_xlim([xoff[0],int(size*100.)+xoff[0]])
+            #ax.set_ylim([yoff[0],int(size*100.)+yoff[0]])
         else:
             jm=0
             for i,a in enumerate(ax):
                 if i+1 not in sumsimple:
                     a.imshow(mim[jm],cmap='gray')
-                    a.set_xlim([xoff[jm],size*100.+xoff[jm]])
-                    a.set_ylim([yoff[jm],size*100.+yoff[jm]])
+                    a.axhline(yoff[jm],xmin=xoff[jm],xmax=int(size*100.)+xoff[jm],color='b')
+                    a.axhline(int(size*100.)+yoff[jm],xmin=xoff[jm],xmax=int(size*100.)+xoff[jm],color='b')
+                    a.axvline(xoff[jm],ymin=yoff[jm],ymax=int(size*100.)+yoff[jm],color='b')
+                    a.axvline(xoff[jm],ymin=yoff[jm],ymax=int(size*100.)+yoff[jm],color='b')
+                    #a.set_xlim([xoff[jm],size*100.+xoff[jm]])
+                    #a.set_ylim([yoff[jm],size*100.+yoff[jm]])
                     jm+=1
                 else:
                     idx=sumsimple.index(i+1)#int(abs(sumsimple[0]-(i+1)))
                     for k,j in enumerate(bext[idx]):
                         if k%2 ==0: col = 'k'
                         else: col = 'w'
-                        a.plot(bext[idx],m[idx]*np.array(bext[idx])+j,color=col)
-                    a.set_xlim([b[idx][0],b[idx][-1]])
-                    a.set_ylim([b[idx][0],b[idx][-1]])
+                        a.fill_between(bext[idx],m[idx]*np.array(bext[idx])+j,m[idx]*np.array(bext[idx])+j+1,color=col)
+                    #a.set_xlim([b[idx][0],b[idx][-1]])
+                    #a.set_ylim([b[idx][0],b[idx][-1]])
                 a.set_aspect('equal')
     else:
+
         fig,ax= plt.subplots(2,nplots/2,figsize=[2*nplots,8])
         jm=0
+        pidx=0
         for i,r in enumerate(itertools.product(range(0,nplots/2),(range(0,2)))):
-            if i+1 not in sumsimple:            
-                ax[r[1]][r[0]].imshow(mim[jm],cmap='gray')
-                ax[r[1]][r[0]].set_ylim([yoff[jm],int(size*100.)+yoff[jm]])
-                ax[r[1]][r[0]].set_xlim([xoff[jm],int(size*100.)+xoff[jm]])
+            if i+1 not in sumsimple:
+                ax[r[1]][r[0]].imshow(mim[jm],cmap='gray',origin='lower left')
+                #rect=patches.Rectangle((xoff[jm],yoff[jm]),int(size*100.),int(size*100.),linewidth=5,edgecolor='b',facecolor='none')
+                #ax[r[1]][r[0]].add_patch(rect)
+                #print(xoff[jm],int(size*100.)+xoff[jm],yoff[jm],int(size*100.)+yoff[jm])
+                if not xaxoff and not yaxoff:
+                    ax[r[1]][r[0]].set_ylim([yoff[jm],int(realsize*100.)+yoff[jm]])
+                    ax[r[1]][r[0]].set_xlim([xoff[jm],int(realsize*100.)+xoff[jm]])
+                else:
+                    ax[r[1]][r[0]].set_ylim([yaxoff[pidx],int(realsize*100.)+yaxoff[pidx]])
+                    ax[r[1]][r[0]].set_xlim([xaxoff[pidx],int(realsize*100.)+xaxoff[pidx]])
+
                 jm+=1
+
             else:
                 idx=sumsimple.index(i+1)
-                for k,j in enumerate(bext[idx]):
+                print('len(bext):', len(bext))
+                for k,j in enumerate(bext[idx:-1]):
                     #print len(bext[i-sumsimple]),len(bext[i-sumsimple]+j)
+                    #print(idx, len(j))
                     #print m[i-sumsimple]
                     if k%2 ==0: col = 'k'
                     else: col = 'w'
-                    ax[r[1]][r[0]].plot(bext[idx],m[idx]*np.array(bext[idx])+j,color=col)
-                ax[r[1]][r[0]].set_xlim([b[idx][0],b[idx][-1]])
-                ax[r[1]][r[0]].set_ylim([b[idx][0],b[idx][-1]])
+                    ax[r[1]][r[0]].fill_between(bext,m[idx]*np.array(bext)+j,m[idx]*np.array(bext)+bext[k+1],color=col)
+                    #rect=patches.Rectangle((b[idx][0],b[idx][0]),b[idx][-1],b[idx][-1],linewidth=5,edgecolor='b',facecolor='none')
+                    #ax[r[1]][r[0]].add_patch(rect)
+                if not xaxoff and not yaxoff:
+                    ax[r[1]][r[0]].set_xlim([b[idx][0],b[idx][0]+int(realsize*100.)])
+                    ax[r[1]][r[0]].set_ylim([b[idx][0],b[idx][0]+int(realsize*100.)])
+                else:
+                    ax[r[1]][r[0]].set_xlim([xaxoff[pidx],xaxoff[pidx]+int(realsize*100.)])
+                    ax[r[1]][r[0]].set_ylim([yaxoff[pidx],yaxoff[pidx]+int(realsize*100.)])
+                    print(r[1],r[0],xaxoff[pidx],yaxoff[pidx])
+
             ax[r[1]][r[0]].set_aspect('equal')
+
             if titles:
                 ax[r[1]][r[0]].set_title(titles[i],fontsize='small')
             ax[r[1]][r[0]].axis('off')
+            pidx+=1
+            print('pidx', pidx)
     plt.tight_layout()
     fig.show()
 
-def plot_moire_simple(moire_period,moire_orientation,size=1.2,reflect=True):
+def plot_moire_simple(moire_period,moire_orientation,size=1.5,reflect=True):
     '''just draw lines because there's too many periods. Only return plottables, plot them together with other windows in plot_moire_fancy'''
     mim,xoff,yoff=[],[],[]
-    nlines=int(moire_period/2.)+1
-    b=np.linspace(0,nlines)
-    #npix = 
-    xp = list(np.linspace(0,nlines))
+    nlines=int((10.*size/(moire_period/2.)))+1
+    b=np.linspace(0,size*200.,2*nlines)
+    #npix =
+    xp = list(b)#np.linspace(0,nlines))
     if reflect:
         slope= np.tan(np.deg2rad(-1*moire_orientation))#calculate the slope
     else:
         slope= np.tan(np.deg2rad(moire_orientation))#calculate the slope
-
-    return slope,list(b) #x,slope and offsets
+    #print len(xp)
+    return slope,xp #list(b) #x,slope and offsets
 
 
 def calc_moire_period(fp,rp,fa,ra,eff=False,quiet=True):
@@ -288,7 +322,7 @@ def calc_moire_period(fp,rp,fa,ra,eff=False,quiet=True):
     fx=1000*np.sin(np.deg2rad(fa))/fp #mm
     fy=-1000*np.cos(np.deg2rad(fa))/fp #mm
     rx=1000*np.sin(np.deg2rad(ra))/rp #mm
-    ry=-1000*np.cos(np.deg2rad(ra))/rp #mm   
+    ry=-1000*np.cos(np.deg2rad(ra))/rp #mm
     kx=fx+rx
     ky=fy+ry
     mx=fx-rx
@@ -306,7 +340,7 @@ def calc_moire_period_mpi(inp):
     twist=inp[7]
     s1=1.+(d2/d1) #d2-d1 replaced by 1.3 (7mm red part, 3mm each lower cover) since this is fixed
     #d2-d1 is replaced by d2 where d2 is acting as delta d, ranging from parameters given
-    s2=1.
+    s2=1. #this is never used? i think it might need to be in this case...
     fp=fpo*s1
     fa=fao+twist
     rp=rpo
@@ -314,12 +348,12 @@ def calc_moire_period_mpi(inp):
     #fa=fa+twist
     #print fp,fa,rp,ra
     #print calc_moire_period(fp,rp,fa,ra,eff=False,quiet=True)
-    
+
     #front and rear period in um, front and rear orientation in degrees
     fx=1000*np.sin(np.deg2rad(fa))/fp #mm
     fy=-1000*np.cos(np.deg2rad(fa))/fp #mm
     rx=1000*np.sin(np.deg2rad(ra))/rp #mm
-    ry=-1000*np.cos(np.deg2rad(ra))/rp #mm   
+    ry=-1000*np.cos(np.deg2rad(ra))/rp #mm
     kx=fx+rx
     ky=fy+ry
     mx=fx-rx
@@ -348,7 +382,7 @@ def calc_all_moire(seg=True,wins=False,nominal=True, plot=False):
         rang =rwdict[0]["nominal angle"]
         fg_periods,rg_periods=plot_eff_period1d(pf=pf,pr=pr,fang=fang,rang=rang,plot=plot)
         print "Mean projected periods, subcoll ", str(w)
-        print "front: ", np.mean(fg_periods)," rear: ",np.mean(rg_periods) 
+        print "front: ", np.mean(fg_periods)," rear: ",np.mean(rg_periods)
         mp,mf=calc_moire_period(np.mean(fg_periods),np.mean(rg_periods),fang,rang)
 
 def test_visibility(seg,size=1.2):
@@ -376,7 +410,7 @@ def test_visibility(seg,size=1.2):
         #print ybot_off
         npds = int((size*10000.)/(pf_eff*2.))#number of effective periods
         #print npds
-        
+
         yvec = np.linspace(ybot_off, ybot_off+(size),npds) #1 point at the start of every slit
         xvec = np.linspace(xleft_off, xleft_off+(size),npds)
         #first_grid_periods=[y + pf_eff for y in yvec] #have to re-adjust to absolute period vs. effective period eventually
@@ -396,7 +430,7 @@ def test_visibility(seg,size=1.2):
         print mf,mr
         #plot the patterns overlaid on each other for examination
         for n in range(0,npds): #plot the lines
-            axx=int(str(w)[0])-1 #only works for seg B actually.... 
+            axx=int(str(w)[0])-1 #only works for seg B actually....
             axy=int(str(w)[1])-1
             #ax[axx,axy].step(xvec1, first_grid_plot,'r')
             #ax[axx,axy].step(xvec2, second_grid_plot,'g')
@@ -407,7 +441,7 @@ def test_visibility(seg,size=1.2):
 
         ax[axx,axy].set_xlabel('Window '+str(w))
         ax[axx,axy].set_xlim([xleft_off,xleft_off+size])
-        ax[axx,axy].set_ylim([xleft_off,xleft_off+size])        
+        ax[axx,axy].set_ylim([xleft_off,xleft_off+size])
         ax[axx,axy].set_ylabel('Distance from y-center (cm)')
 
     fig.show()

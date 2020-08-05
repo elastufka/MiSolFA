@@ -39,11 +39,11 @@ def calc_lindsey(maxr=100):
     plot(uprimef_amp,xstar,[0,100],[0,1],'test',labels)
     return uprimef_amp
     #plot U'
-    
+
 def calc_lindsey_dimensionless(maxr=100):
     #define the variables
-    p= np.array([0.015,0.03,0.045,0.09,0.18,0.225]) #period and pitch are the same thing, right? for a uniform grid?
-    mlambda =np.arange(1.239*10**-7,1.239*10**-6,1.239*10**-8,dtype=float)  # 10-100 keV in mm
+    p= np.array([0.015,0.018,0.0225,0.03,0.045,0.09]) #period and pitch are the same thing, right? for a uniform grid?
+    mlambda =np.arange(1.239*10**-8,1.239*10**-7,1.239*10**-8,dtype=float)  # 10-100 keV in mm
     thetax=0.
     k=2*np.pi/mlambda
     kappa= 2*np.pi/p #array size 6
@@ -58,7 +58,7 @@ def calc_lindsey_dimensionless(maxr=100):
     f,axes = plt.subplots(3,2)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
-   
+
     for m,pp in enumerate(p): #kappa: #for each pitch
         uprime = []
         for i,val in enumerate(xstar):
@@ -66,12 +66,12 @@ def calc_lindsey_dimensionless(maxr=100):
             J=JofXstar(h,kappa[m],val,maxr)
             uprime.append(A*np.exp(1j*k[0]*D)*J*np.exp(1j*2*np.pi*(pp/mlambda[0])*val*np.sin(thetax)))
         uprimef.append(uprime*np.conj(uprime))
-        axes.flat[m].plot(xstar,uprimef[m],'.r-', label='p='+str(p[m])+'mm')
+        axes.flat[m].plot(xstar,uprimef[m],'.b-', label='p='+str(1000.*p[m])+'$\mu$m')
         axes.flat[m].set_xlim([0.75,1.75])
         axes.flat[m].set_ylim([0,2])
         axes.flat[m].legend(loc='upper right',fontsize='small')
 
-    plt.suptitle('Lindsey algorithm for Ronchi grid diffraction over one period,10 keV')
+    plt.suptitle('Diffraction over one grating period,100 keV')
     f.show()
 
     #uprimef_conj=np.conj(uprimef)
@@ -99,7 +99,7 @@ def calc_lindsey_energy_intensity_G1d(maxr=100):
     f,axes = plt.subplots(3,2)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
-   
+
     for m,pp in enumerate(p): #kappa: #for each pitch
         uprime = []
         for i,val in enumerate(mlambda):
@@ -111,7 +111,7 @@ def calc_lindsey_energy_intensity_G1d(maxr=100):
         axes.flat[m].set_xlim([0,50])
         axes.flat[m].set_ylim([0,2])
         axes.flat[m].legend(loc='upper right',fontsize='small')
-        
+
     plt.suptitle('Lindsey algorithm for Ronchi grid diffraction')
     f.show()
 
@@ -138,7 +138,7 @@ def calc_lindsey_energy_intensity_I(maxr=100):
     f,axes = plt.subplots(3,2)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
-   
+
     for m,pp in enumerate(p): #kappa: #for each pitch
         iint=[]
         for i,val in enumerate(mlambda):
@@ -150,12 +150,12 @@ def calc_lindsey_energy_intensity_I(maxr=100):
         axes.flat[m].set_xlim([0,50])
         #axes.flat[m].set_ylim([0,2])
         axes.flat[m].legend(loc='upper right',fontsize='small')
-        
+
     plt.suptitle('Lindsey algorithm for Ronchi grid diffraction: intensity I vs. E (keV)')
     f.show()
 
     labels=[str(p[0]),str(p[1]),str(p[2]),str(p[3]),str(p[4]),str(p[5])]
-    
+
 def calc_lindsey_multiple_1period(maxr=100):
     #define the variables
     p= np.array([0.015,0.018,0.0225,0.03,0.045,0.09]) #period and pitch are the same thing, right? for a uniform grid?
@@ -174,7 +174,7 @@ def calc_lindsey_multiple_1period(maxr=100):
     f,axes = plt.subplots(3,2)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
-   
+
     for m,pp in enumerate(p): #kappa: #for each pitch
         uprime,fgrid = [],[]
         #fgrid.append(np.sum(gsubn*np.exp(1j*n*2*np.pi*[x]/pp)) for x in xstar)
@@ -193,7 +193,7 @@ def calc_lindsey_multiple_1period(maxr=100):
         axes.flat[m].set_ylim([0,2])
         axes.flat[m].legend(loc='upper right',fontsize='small')
         print pp,np.min(uprimef[m]*np.array(fgrid)),np.max(uprimef[m]*np.array(fgrid))
-        
+
     plt.suptitle('Lindsey algorithm for Ronchi grid diffraction')
     f.show()
 
@@ -214,7 +214,7 @@ def calc_difference_sep(maxr=100):
     f,axes = plt.subplots(3,2)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
-   
+
     for m,pp1,pp2 in enumerate(zip(p1,p2)): #kappa: #for each pitch
         uprime = []
         for i,val in enumerate(xstar):
@@ -231,11 +231,11 @@ def calc_difference_sep(maxr=100):
         axes.flat[m].set_xlim([0.5,1.5])
         axes.flat[m].set_ylim([0,2])
         axes.flat[m].legend(loc='upper right',fontsize='small')
-        
+
     plt.suptitle('Difference in diffraction between D=206.28mm and D=154.7')
     f.show()
-    
-    
+
+
 def calc_lindsey_multiple_energy_intensity(maxr=100):
     #define the variables
     p= np.array([0.015,0.03,0.045,0.09,0.18,0.225]) #period and pitch are the same thing, right? for a uniform grid?
@@ -254,7 +254,7 @@ def calc_lindsey_multiple_energy_intensity(maxr=100):
     f,axes = plt.subplots(3,2)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
-   
+
     for m,pp in enumerate(p): #kappa: #for each pitch
         uprime = []
         for i,val in enumerate(mlambda):
@@ -266,7 +266,7 @@ def calc_lindsey_multiple_energy_intensity(maxr=100):
         axes.flat[m].set_xlim([0,50])
         axes.flat[m].set_ylim([0,2])
         axes.flat[m].legend(loc='upper right',fontsize='small')
-        
+
     plt.suptitle('Lindsey algorithm for Ronchi grid diffraction')
     f.show()
 
@@ -276,7 +276,7 @@ def calc_lindsey_multiple_energy_intensity(maxr=100):
     #plot(uprimef,xstar,[0,1],[0,1],'test',labels)
     #return uprimef
     #plot U'
-    
+
 def test_Ronchi_grid(maxr=100):
     #define the variables
     #p= np.array([0.015,0.03,0.045,0.09,0.18,0.225]) #period and pitch are the same thing, right? for a uniform grid?
@@ -313,21 +313,21 @@ def test_Ronchi_grid(maxr=100):
 
     plt.suptitle('Lindsey algorithm for Ronchi grid diffraction over one period')
     f.show()
-            
+
     uprimef.append(uprime)
 
     uprimef_conj=np.conj(uprimef)
     uprimef_amp = (uprimef*uprimef_conj)
     #labels=[str(D[0]),str(D[1]),str(D[2]),str(D[3]),str(D[4]),str(D[5])]
     #plot(uprimef_amp,x,[0,1],[0,10],'test',labels)
-    
+
     #g,ax2=plt.subplots(1)
     #ax2.plot(x,uprime*np.conj(uprime))
     #plt.show()
-    
+
     return uprimef_amp
     #plot U'
-    
+
 def JofX(h,kappa,x,maxr):
     nn=np.arange(-maxr/2,maxr/2)
     J=np.zeros(maxr)
@@ -352,7 +352,7 @@ def HsubN(D,k,thetax,kappa,gsubn,maxr):
     nn=np.arange(-maxr/2,maxr/2)
     h=np.zeros(maxr)
     for i,n in enumerate(nn):
-        h[i]= gsubn[i]*np.exp((-1j*D/(2*k))*(k*np.sin(thetax)+kappa*n)**2)      
+        h[i]= gsubn[i]*np.exp((-1j*D/(2*k))*(k*np.sin(thetax)+kappa*n)**2)
     return h
 
 def HsubPprime(D,k,thetax,kappa,gsubn,maxr):
@@ -360,7 +360,7 @@ def HsubPprime(D,k,thetax,kappa,gsubn,maxr):
     hprime=np.zeros(maxr)
     h=HsubN(D,k,thetax,kappa,gsubn,maxr)
     for i,n in enumerate(nn):
-        hprime[i]= h[i]*gsubn[i]*np.exp(-1j*D*(kappa**2*n**2)/(2*k))*np.exp(-1j*kappa*D*n*np.sin(thetax))      
+        hprime[i]= h[i]*gsubn[i]*np.exp(-1j*D*(kappa**2*n**2)/(2*k))*np.exp(-1j*kappa*D*n*np.sin(thetax))
     return hprime
 
 def bigK(kappa,x,hprime,maxr):
@@ -368,7 +368,7 @@ def bigK(kappa,x,hprime,maxr):
     K=np.zeros(maxr)
     for i,p in enumerate(pp):
         K[i]=np.exp(1j*kappa*p*x)*hprime[i]
-    return np.sum(K)    
+    return np.sum(K)
 
 def HsubP2(D1,D2,k,thetax,kappa,gsubn,gsubn0,maxr): #do gsubn1 and gsubn2 have to be different?
     #HsubN_theta is HsubN calculated for the previous grid's parameters D,k,theatx,kappa,etc
@@ -378,7 +378,7 @@ def HsubP2(D1,D2,k,thetax,kappa,gsubn,gsubn0,maxr): #do gsubn1 and gsubn2 have t
     h=[]
     hm=[]
     deltad=D1-D2
-    
+
     for j,m in enumerate(n2):
         hm.append(gsubn[j]*np.exp(-1j*kappa*m*D2*np.sin(thetax)))
     for i,n in enumerate(n1):
@@ -426,10 +426,10 @@ def test_UDoublePrime(maxr=100,D=[1.,1.01,1.02,1.03,1.04]):
         axes[j].legend()
         #axes[j].set_ylim([0,0.5])
         print np.min(intensity*np.conj(intensity)),np.max(intensity*np.conj(intensity))
-        
+
     plt.suptitle('Lindsey algorithm for Ronchi grid diffraction over one period')
     f.show()
-            
+
 def test_BZIntensity(maxr=100,D=[1.,1.01,1.02,1.03,1.04]):
     '''I=integral over one period of U'U'*g'''
     import scipy.integrate as integrate
@@ -467,7 +467,7 @@ def test_BZIntensity(maxr=100,D=[1.,1.01,1.02,1.03,1.04]):
         axes[j].legend()
         #axes[j].set_ylim([0,0.5])
         #print np.min(intensity*np.conj(intensity)),np.max(intensity*np.conj(intensity))
-        
+
     plt.suptitle('Lindsey algorithm for Ronchi grid diffraction over one period')
     f.show()
 
@@ -482,7 +482,7 @@ def largeTheta(maxr=100):
     D2=0
     x=np.arange(0,maxr,dtype=float)/(maxr) #range from 0 to 1
     #x=[-1.,-.5,0,.5,.999]
-    uprime,uprime1,uprime2=[],[],[]    
+    uprime,uprime1,uprime2=[],[],[]
     for i,val in enumerate(x):
         h=HsubN(D1,k,thetax,kappa,gsubn,maxr)
         J=JofX(h,kappa,val,maxr)
@@ -493,10 +493,10 @@ def largeTheta(maxr=100):
         uprime1.append(u1)
         uprime2.append(u2)
         uprime.append(u1*u2)
-        
+
     uprimef_conj=np.conj(uprime)
     uprimef_amp = (uprime*uprimef_conj)
- 
+
     f,ax =plt.subplots()# plt.subplots(5, sharex=True, sharey=True)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
@@ -516,7 +516,7 @@ def largeTheta(maxr=100):
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
     for i,val in enumerate(x):
-        uprime,uprime1,uprime2=[],[],[]    
+        uprime,uprime1,uprime2=[],[],[]
         for j,thetax in enumerate(theta):
             h=HsubN(D1,k,thetax,kappa,gsubn,maxr)
             J=JofX(h,kappa,val,maxr)
@@ -527,7 +527,7 @@ def largeTheta(maxr=100):
             uprime1.append(u1)
             uprime2.append(u2)
             uprime.append(u1*u2)
-        
+
         uprimef_conj=np.conj(uprime)
         uprimef_amp = (uprime*uprimef_conj)
         #ax[i].plot(theta,uprime1*np.conj(uprime1),'r')
@@ -536,10 +536,10 @@ def largeTheta(maxr=100):
         ax[i].set_xlim([1,np.pi])
         ax[i].legend()
         #ax.set_ylim([0,1.4])
-    
+
     plt.suptitle('Expected result in the limit of large theta, D1=100mm, D2=10mm')
     f.show()
-   
+
     return uprime,uprime1,uprime2
 
 def TwentyThree(maxr=100):
@@ -555,10 +555,11 @@ def TwentyThree(maxr=100):
     kappa= 2*np.pi #array size 6
     A=1.
     gsubn=0.5*np.sinc(0.5*np.arange(-maxr/2,maxr/2))
+    gsubn0=gsubn
     intensity=[]
-    
+
     for n in range(0,len(d)):
-        h=HsubP2(D1[n],D2[n],k,thetax,kappa,gsubn,maxr)
+        h=HsubP2(D1[n],D2[n],k,thetax,kappa,gsubn,gsubn0,maxr)
         hstar=np.conj(h)
         intensity.append(np.sum(h*hstar)) #should be a function of d
         #print D1,D2,h[0],h[99],intensity[n]
@@ -570,7 +571,7 @@ def TwentyThree(maxr=100):
     ax.set_ylim([0,1])
     #ax.set_yscale('log')
     fig.show()
-    
+
     return intensity
 
 def test_alg_largeTheta(maxr=100):
@@ -588,13 +589,13 @@ def test_alg_largeTheta(maxr=100):
     m=n
     x=np.arange(0,maxr,dtype=float)/(maxr) #range from 0 to 1
     #x=[-1.,-.5,0,.5,.999]
-    uprime,uprime1,uprime2=[],[],[]    
+    uprime,uprime1,uprime2=[],[],[]
     for i,val in enumerate(x):
         h=HsubP2(D1,D2,k,thetax,kappa,gsubn,gsubn0,maxr)
         bigK=np.sum(h*np.exp(1j*kappa*i*val*n))
         uprime.append(A*np.exp(1j*k*D)*bigK*np.exp(1j*k*val*np.sin(thetax)))
         #intensity[i]=(np.sum(h*hstar)) #should be a function of d
-         
+
     f,ax =plt.subplots()# plt.subplots(5, sharex=True, sharey=True)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
@@ -605,7 +606,7 @@ def test_alg_largeTheta(maxr=100):
 
     plt.suptitle('Expected result in the limit of large theta, D1=100mm, D2=10mm, theta=1')
     f.show()
-   
+
 
 def lindseyfig2(maxr=100):
     '''reproduce Lindsey figure 2 to test algorithm. 1m between grids with 50 um slits separated by 100 um => period 150 um, wavelengths 0,1 and 10 A'''
@@ -634,11 +635,11 @@ def lindseyfig2(maxr=100):
     #ax.plot(thetax,np.imag(intensity[0,:]),'-')
     #ax.plot(thetax,np.imag(intensity[1,:]),'b-')
     #ax.plot(thetax,np.imag(intensity)[2,:],'g-')
-    
+
     ax.set_ylim([0,1])
     #ax.set_yscale('log')
     fig.show()
-    
+
     return intensity
 
 
@@ -673,14 +674,14 @@ def plot(uprimef,mlambda,xran,yran,title,label):
     f, (ax1, ax2, ax3,ax4,ax5,ax6) = plt.subplots(6, sharex=True, sharey=True)
     fig = plt.gcf()
     fig.set_size_inches(3.5, 6.5)
-    if np.shape(np.shape(mlambda))[0] == 1: 
+    if np.shape(np.shape(mlambda))[0] == 1:
         ax1.plot(mlambda, uprimef[0], color="y",label=label,linewidth='2')
         ax2.plot(mlambda, uprimef[1], color="g",label=label,linewidth='2')
         ax3.plot(mlambda, uprimef[2], color="m",label=label,linewidth='2')
         ax4.plot(mlambda, uprimef[3], color="c",label=label,linewidth='2')
         ax5.plot(mlambda, uprimef[4], color="k",label=label,linewidth='2')
         ax6.plot(mlambda, uprimef[5], color="r",label=label,linewidth='2')
-    else: 
+    else:
         ax1.plot(mlambda[0], uprimef[0], color="y",label=label,linewidth='2')
         ax2.plot(mlambda[1], uprimef[1], color="g",label=label,linewidth='2')
         ax3.plot(mlambda[2], uprimef[2], color="m",label=label,linewidth='2')
@@ -703,10 +704,10 @@ def calc_functions(maxr,n,p,Rstar,mlambda, function):
         sum_Acos = np.zeros((0))
 
         for xx in xstar: #sum first - x* will remain the variable. This is for fixed R*.
-            sum_Asin = np.append(sum_Asin, np.sum(np.sin(2*np.pi*xx*(2*n+1)))) 
-            sum_Acos = np.append(sum_Acos, np.sum((np.cos(np.pi*Rstar*(2*n+1)**2))/(2*n+1))) 
-            sum_Asubn = np.append(sum_Asubn, np.sum(np.sin(2*np.pi*xx*(2*n+1))*np.cos(np.pi*Rstar*(2*n+1)**2)/(2*n+1))) 
-            sum_Bsubn = np.append(sum_Bsubn, np.sum(np.sin(2*np.pi*xx*(2*n+1))*np.sin(np.pi*Rstar*(2*n+1)**2)/(2*n+1))) 
+            sum_Asin = np.append(sum_Asin, np.sum(np.sin(2*np.pi*xx*(2*n+1))))
+            sum_Acos = np.append(sum_Acos, np.sum((np.cos(np.pi*Rstar*(2*n+1)**2))/(2*n+1)))
+            sum_Asubn = np.append(sum_Asubn, np.sum(np.sin(2*np.pi*xx*(2*n+1))*np.cos(np.pi*Rstar*(2*n+1)**2)/(2*n+1)))
+            sum_Bsubn = np.append(sum_Bsubn, np.sum(np.sin(2*np.pi*xx*(2*n+1))*np.sin(np.pi*Rstar*(2*n+1)**2)/(2*n+1)))
 
         G1d = .25 + (2/np.pi)*sum_Asubn + (4/np.pi**2)*(sum_Asubn**2+sum_Bsubn**2) #from eq 8
         var=G1d
@@ -717,10 +718,10 @@ def calc_functions(maxr,n,p,Rstar,mlambda, function):
         sum_Acos = np.zeros((0))
         xstar =0.20
         for rr in Rstar:
-            sum_Asin = np.append(sum_Asin, np.sum(np.sin(2*np.pi*xstar*(2*n+1)))) 
-            sum_Acos = np.append(sum_Acos, np.sum((np.cos(np.pi*rr*(2*n+1)**2))/(2*n+1))) 
-            sum_Asubn = np.append(sum_Asubn, np.sum(np.sin(2*np.pi*xstar*(2*n+1))*np.cos(np.pi*rr*(2*n+1)**2)/(2*n+1))) 
-            sum_Bsubn = np.append(sum_Bsubn, np.sum(np.sin(2*np.pi*xstar*(2*n+1))*np.sin(np.pi*rr*(2*n+1)**2)/(2*n+1))) 
+            sum_Asin = np.append(sum_Asin, np.sum(np.sin(2*np.pi*xstar*(2*n+1))))
+            sum_Acos = np.append(sum_Acos, np.sum((np.cos(np.pi*rr*(2*n+1)**2))/(2*n+1)))
+            sum_Asubn = np.append(sum_Asubn, np.sum(np.sin(2*np.pi*xstar*(2*n+1))*np.cos(np.pi*rr*(2*n+1)**2)/(2*n+1)))
+            sum_Bsubn = np.append(sum_Bsubn, np.sum(np.sin(2*np.pi*xstar*(2*n+1))*np.sin(np.pi*rr*(2*n+1)**2)/(2*n+1)))
 
         G1d = .25 + (2/np.pi)*sum_Asubn + (4/np.pi**2)*(sum_Asubn**2+sum_Bsubn**2) #from eq 8
         var=G1d
@@ -738,14 +739,14 @@ def calc_functions(maxr,n,p,Rstar,mlambda, function):
         #print np.shape(sum_Asubn)
         Id = .25 + (2/np.pi**2)*sum_Asubn
         var=Id
-        
+
     if function == 'C': #contrast - eq. 35. Now I is a function of R, not xi
         #C(R*)=[Id'(R*)-Id'(R*=1/2)]/Id'(R*=1/2)]
         xstar = 0.0
 
         for rr in Rstar:
            sum_Asubn = np.append(sum_Asubn,np.sum(np.cos(2*np.pi*xstar*(2*n+1))*np.cos(np.pi*rr*(2*n+1)**2)/(2*n+1)))
-           
+
         Id_Rhalf = np.zeros((len(Rstar)))+ .25 + (2/np.pi**2)*np.sum(np.cos(2*np.pi*xstar*(2*n+1))*np.cos(np.pi*.5*(2*n+1)**2)/(2*n+1))
         Id = .25 + (2/np.pi**2)*sum_Asubn
         #print np.shape(sum_Asubn),np.shape(Id),np.shape(Id_Rhalf)

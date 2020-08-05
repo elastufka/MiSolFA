@@ -20,35 +20,158 @@ import glob
 import random
 import itertools
 import analyze_general as ag
+from analyze_xray import read_logfile
+import os
+from grating import EMparams, QMparams
+
+global EMreq
+global QMreq
+
+EMreq={'11':{'pitch':0.085, 'angle':0.085},
+          '21':{'pitch':0.085, 'angle':0.085},
+          '12':{'pitch':0.011, 'angle':0.011},
+          '22':{'pitch':0.011, 'angle':0.011},
+          '31':{'pitch':0.035, 'angle':0.035},
+          '41':{'pitch':0.035, 'angle':0.035},
+          '32':{'pitch':0.007, 'angle':0.007},
+          '42':{'pitch':0.007, 'angle':0.007},
+          '33':{'pitch':0.018, 'angle':0.018},
+          '43':{'pitch':0.018, 'angle':0.018},
+          '34':{'pitch':0.005, 'angle':0.005},
+          '44':{'pitch':0.005, 'angle':0.005}}
+
+QMreq={'11':{'pitch':0.095, 'angle':0.095},
+          '21':{'pitch':0.095, 'angle':0.095},
+          '12':{'pitch':0.038, 'angle':0.038},
+          '22':{'pitch':0.038, 'angle':0.038},
+          '31':{'pitch':0.023, 'angle':0.023},
+          '41':{'pitch':0.023, 'angle':0.023},
+          '32':{'pitch':0.012, 'angle':0.012},
+          '42':{'pitch':0.012, 'angle':0.012},
+          '33':{'pitch':0.0087, 'angle':0.0087},
+          '43':{'pitch':0.0087, 'angle':0.0087},
+          '34':{'pitch':0.0063, 'angle':0.0063},
+          '44':{'pitch':0.0063, 'angle':0.0063}}
 
 class Results():
 
-    def __init__(self,win,kind,method,errors,data,nominal=False,filenames=False,stats=False,params=False):
-        '''Make an object to hold results'''
+    def __init__(self,win,kind,flags,method=False,errors=False,data=False,nominal=False,filenames=False,stats=False,params=False):
+        '''Make an object to hold results. if optical: kind ={'type':optical,'model':model,'folder':folder,'side':side}'''
         self.win=win
         self.kind=kind
-        self.method=method
-        self.errors=errors
-        self.data=data
-        self.nominal=nominal
+        self.flags=flags
+        if self.kind['type'] == 'optical' and self.kind['model']=='EM':
+            self.requirements=EMreq[str(win)]
+        elif self.kind['type'] == 'optical' and self.kind['model']=='QM':
+            self.requirements=QMreq[str(win)]
+        if method:
+            self.method=method #else it's probably not relevant if not Xray
+        if errors:
+            self.errors=errors
+        if data:
+            self.data=data
+        else:
+            self._load_data()
+        if nominal:
+            self.nominal=nominal
+        #else:
+        #    if self.kind['type'] == 'optical' and self.kind['model']=='EM':
+        #        self.nominal=
+        #    elif self.kind['type'] == 'optical' and self.kind['model']=='QM':
+        #        self.nominal=
         if stats:
             self.stats=stats
         else:
-            self.stats={} # get_stats  - do stats on data
+            self.stats=self._get_stats() # get_stats  - do stats on data
+        if 'theta' in self.data.keys():
+            self.angle_stats={'theta0':self.data['theta0'],'theta':self.data['theta'],'theta_std':self.data['theta_std']}
+            self.fix_angle_xray()
         if filenames:
             self.filenames=filenames
         else:
-            self.filenames={} # gen_filenames from data
+            self.filenames={} # gen_filenames from data <-- what filenames are these supossed to be?
         if params:
             self.calc_params=params
+        else: #use default params from gratings globals. if optical
+            if self.kind['type']=='optical' and self.kind['model']=='EM':
+                self.calc_params=EMparams[str(self.win)]
+            elif self.kind['type']=='optical' and self.kind['model']=='QM':
+                self.calc_params=QMparams[str(self.win)]
+        self.tex={}
 
-    def reload_widthdata_from_files(self):
+    def _load_data(self):
+        ''' load data, optical or x-ray'''
+        folder=self.kind['folder']
+        win=self.win
+        os.chdir(folder)
+        #default ftags='a'
+        datafile='win'+str(win)+'_width_data5.0Xa.p'
+        self.data=pickle.load(open(datafile,'rb'))
+        os.chdir('../..')
+
+    def _get_stats(self,overwrite=False):
+        '''get stats from statfiles. if no statfiles or overwrite, get from data?'''
+        folder=self.kind['folder']
+        win=self.win
+        #default ftags='a'
+        os.chdir(folder)
+        pstatfile='win'+str(win)+'_width_stats5.0Xa.p'
+        try:
+            self.period_stats=pickle.load(open(pstatfile,'rb'))
+        except IOError:
+            pass
+        astatfile='win'+str(win)+'_angle_stats_5.0.p'
+        try:
+            self.angle_stats=pickle.load(open(astatfile,'rb'))
+        except IOError:
+            os.chdir
+            hdata=glob.glob('win'+str(win)+'*hough_ll200.p')
+            if hdata !=[]:
+                theta=ag.hough_hist(hdata,win,0.0,figname=figname,tol=htol,spread=2.,mask45=False,ret=True) #make histogram
+                theta0=aXray.read_logfile(data_dict['folder']+'.log', win)
+                self.angle_stats={'theta0':theta0,'theta':theta,'theta_std':np.nanstd(theta)}
+        os.chdir('../..')
+
+    def fix_angle_xray(self,lim=88.):
+        th=np.abs(self.angle_stats['theta'])
+        th.sort()
+        th=np.array(th)
+        try:
+            aa=np.where(th < lim)[0][-1]
+            newth=th[aa+1:]
+            self.angle_stats['theta_std']=np.std(newth)
+            self.angle_stats['theta']=newth
+        except IndexError:
+            newth=self.angle_stats['theta']
+        #adjust w.r.t. nominal...
+        thmean=np.nanmean(newth)
+        th0=self.angle_stats['theta0']
+        fac=int(th0/45.)
+        #want th_adj to have the same sign as the original...
+        if fac % 2 !=0:
+            th0_adj=45.*(fac+1) -th0
+        else:
+            th0_adj=45.*(fac) -th0
+        thm_adj=90.-thmean
+        nang=self.nominal['orientation']
+        if np.sign(thm_adj) != np.sign(nang):
+            thm_adj=-1.*thm_adj
+        if np.sign(nang) ==1:
+            delta_nom = min(np.abs(th0_adj+thm_adj)-nang,np.abs(th0_adj-thm_adj)-nang)
+        else:
+            delta_nom=max(np.abs(th0_adj+thm_adj)+nang,np.abs(th0_adj-thm_adj)+nang)
+
+        print th0,fac,th0_adj,thm_adj,nang,delta_nom
+        self.angle_stats['delta_nom']=delta_nom
+
+    def reload_widthdata_from_files(self,flagged=False):
         #{'xdata':xvec,'ydata':ydata,'mean_ang':ydataa, \
         #                                             'raw_widths_P':sumvecp,'raw_widths_A':sumveca, \
         #                                            'raw_periods_P':sumpp,'raw_periods_A':sumpa, \
         #                                            'mean_widths_P':meanvecp,'mean_widths_A':meanveca, \
         #                                            'mean_periods_P':meanpp,'mean_periods_A':meanpa}
 
+        #DON'T LOAD FLAGGED DATA UNLESS SPECIFIED
         #basic check
         if self.method != 'widths':
             return
@@ -57,30 +180,44 @@ class Results():
         xvec=self.data['xdata']
         xstr=['{:g}'.format(xv) for xv in xvec]
         print xstr
-        dfiles=['win'+str(self.win)+'_width_data_p'+str(pp)+'_'+xv+'.p' for pp in range(0,7) for xv in xstr]
-        sfiles=['win'+str(self.win)+'_width_stats_p'+str(pp)+'_'+xv+'.p' for pp in range(0,7) for xv in xstr]
-        print dfiles[:10]
-        print sfiles[:10]
+        p0ang=['p'+str(pp)+'_'+xv for pp in range(0,7) for xv in xstr]
+        if not flagged: #if flagged, get rid of it...
+            flags=self.flags
+            p0new=[p for p in p0ang if p not in flags]
+        else:
+            p0new=p0ang
+        #dfiles=['win'+str(self.win)+'_width_data_'+p+'.p' for p0new]
+        #sfiles=['win'+str(self.win)+'_width_stats_'+p+'.p' for p in p0new]
+        #print dfiles[:10]
+        #print sfiles[:10]
         newparams={}
         allwidths,allperiods=[],[]
-        for d,s in zip(dfiles,sfiles):
-            data=pickle.load(open(d,'rb'))
-            aa=pickle.load(open(d,'rb'))
-            try:
-                sig=aa[1]
-                n=aa[2]
-            except KeyError:
+        for p in p0ang:
+            if p in p0new:
+                data=pickle.load(open('win'+str(self.win)+'_width_data_'+p+'.p','rb'))
+                aa=pickle.load(open('win'+str(self.win)+'_width_stats_'+p+'.p','rb'))
                 try:
-                    sig=self.calc_params['sigma']
-                    n=self.calc_params['tolvec']
+                    sig=aa[1]
+                    n=aa[2]
                 except KeyError:
-                    sig,n=self.calc_params[s]
+                    try:
+                        sig=self.calc_params['sigma']
+                        n=self.calc_params['tolvec']
+                        psig=self.calc_params['psigma']
+                    except KeyError:
+                        #sig,n=self.calc_params[s] #what was s??
+                        continue
 
-            newparams[s]=[sig,n]
-            pp=data['period']
-            ww=data['widths']
+                #newparams[s]=[sig,n]
+                pp=data['period']
+                ww=data['widths']
+            else:
+                pp=np.empty(len(xstr))
+                pp[:]=np.NaN
+                ww=np.empty(len(xstr))
+                ww[:]=np.NaN
 
-            allwidths.append(np.array(ww))
+            allwidths.append(np.array(ww)) #need to put row of null where flagged
             allperiods.append(np.array(pp))
         allwidthsp=[allwidths[i::len(xvec)] for i in range (0,len(xvec))]#[allwidths[i::7] for i in range(0,7)]
         allwidthsa=[allwidths[i::7] for i in range (0,7)]
@@ -106,7 +243,7 @@ class Results():
                                                     'raw_periods_P':sumpp,'raw_periods_A':sumpa, \
                                                     'mean_widths_P':meanvecp,'mean_widths_A':meanveca, \
                                                     'mean_periods_P':meanpp,'mean_periods_A':meanpa}
-        self.calc_params=newparams
+        #self.calc_params=newparams
 
 
     def _mask_raw(self,var,p=True,percent=0.5):
@@ -138,6 +275,119 @@ class Results():
         ag.plot_centers_and_edges(edges,ce,dfile)
         if ret:
             return ce
+
+    def recalc_sc(self,pix2um=1.955):
+        '''recalculate slit and slat centers'''
+        rising=self.data['rising']
+        falling=self.data['falling']
+        #from rising_or_falling_final
+        slitc,slatc=[],[]
+        for rise,fall in zip(rising,falling):
+            flist=[0 for f in fall]
+            rlist=[1 for r in rise]
+            rlist.extend(flist)
+            masterlist=rise
+            masterlist.extend(fall)
+            locs, rorf = (list(t) for t in zip(*sorted(zip(masterlist, rlist))))
+            cslit,cslat=[],[]
+
+            for i,loc,code in zip(range(0,len(locs[:-1])),locs[:-1],rorf[:-1]):
+                testsum=code+rorf[i+1]
+                if testsum == 1: #r and f (but in what order?)
+                    if code ==1: #r then f
+                        cslat.append((locs[i+1]-loc)/2. + loc) #slat centers, not slit centers
+                    else:
+                        cslit.append((locs[i+1]-loc)/2. + loc) #slit centers
+            slatc.extend(cslat)
+            slitc.extend(cslit)
+        self.data['slat_centers']=slatc
+        self.data['slit_centers']=slitc
+
+        #now calculate periods
+        def calc_p(centers):
+            period=[]
+            for n,c in enumerate(centers[:-1]):
+                period.append(centers[n+1]-c)
+            return period
+
+        pslat=pix2um*np.array(calc_p(slatc))
+        pslit=pix2um*np.array(calc_p(slitc))
+        self.data['periods_from_slat_centers']=pslat
+        self.data['periods_from_slit_centers']=pslit
+        #update stats
+        self.period_stats['anum']=len(pslat)
+        self.period_stats['amean']=np.mean(pslat)
+        self.period_stats['amed']=np.median(pslat)
+        self.period_stats['adev']=np.std(pslat)
+        self.period_stats['inum']=len(pslit)
+        self.period_stats['imean']=np.mean(pslit)
+        self.period_stats['imed']=np.median(pslit)
+        self.period_stats['idev']=np.std(pslit)
+
+
+    def filter_xray_widths(self,key,fac=2.,percent=5.,update_stats=True,update_data=True,pix2um=0.65):
+        '''wrapper for do_filter_nominal and do-filter_multiples'''
+        period=pix2um*self.data[key]
+        wkey='mean_widths'+key[-2:]
+        width=pix2um*self.data[wkey]
+        npitch=self.nominal['pitch']
+        dim=np.shape(period)
+        fparr=[]
+        mparr=np.zeros(dim)
+        scount=0
+        for i in range(0,dim[0]):
+            frow=[]
+            for j in range (0,dim[1]):
+                fp,mult=ag.do_filter_nominal(period[i][j],npitch,fac=fac)
+                frow.append(list(fp))
+                mparr[i][j]=np.mean(fp)
+                scount=scount+len(list(fp))
+            fparr.append(frow)
+
+        newp=np.array(fparr)
+        #mean, etc
+        newy=np.transpose(width)/mparr
+
+        if update_stats:
+            snum=key+'num'
+            smean=key+'mean'
+            smed=key+'med'
+            sdev=key+'dev'
+            self.period_stats[snum]=scount
+            self.period_stats[smean]=np.mean(mparr)
+            self.period_stats[smed]=np.median(mparr)
+            self.period_stats[sdev]=np.std(mparr)
+
+        if update_data:
+            self.data[key]=newp
+            self.data['mean_periods'+key[-2:]]=mparr #have to update mean whatevers too
+            self.data['ydata']=newy
+
+    def filter_optical_widths(self,key,fac=2.,percent=5.,update_stats=True,update_data=True):
+        '''wrapper for do_filter_nominal and do-filter_multiples'''
+        period=self.data[key]
+        npitch=self.nominal['pitch']
+        fp,mult=ag.do_filter_nominal(period,npitch,fac=fac)
+        #fm=ag.do_filter_multiples(mult,npitch,frac=fac)
+        #fp.extend(fm)
+        newp=fp
+        if len(key)>10:
+            newkey='filtered_periods_'+key[13:17]
+            iora=key[15]
+        else:
+            newkey='filtered_periods'
+        self.data[newkey]=newp
+        if update_stats:
+            snum=iora+'num'
+            smean=iora+'mean'
+            smed=iora+'med'
+            sdev=iora+'dev'
+            self.period_stats[snum]=len(newp)
+            self.period_stats[smean]=np.mean(newp)
+            self.period_stats[smed]=np.median(newp)
+            self.period_stats[sdev]=np.std(newp)
+        if update_data:
+            self.data[key]=newp
 
     def filter_outliers_widths(self,percent=0.5):
         '''mask out elements that are multiple times the median value in a raw data set of widths and periods'''
@@ -302,17 +552,33 @@ class Results():
                 except NameError:
                     self.fit_height={'p'+str(pindex):valdict}
 
-    def fit_profile_to_data_optimize(self,pindex,period,height,plot=True,ret=False,height_bounds=False, width_bounds=False,dc_bounds=False,yoff_bounds=False,fit_bounds=[1,-1],fix_dc=True,show=True,xvmid=False):
+    def fit_profile_to_data_optimize(self,pindex,period,height,plot=True,ret=False,height_bounds=False, width_bounds=False,dc_bounds=False,yoff_bounds=False,fit_bounds=False,fix_dc=True,show=True,xvmid=False, oplot_nominal=True,soverwrite=False,sum_fac=False):
         '''fit a triangular transmission profile to the given one, leaving both height and width free. Return average width and tilt angle'''
+        if not width_bounds:
+            try:
+                mpitch=self.period_stats['mean']/2.
+                mdev=self.period_stats['stddev']/2.
+                width_bounds=[mpitch-mdev,mpitch+mdev]
+            except AttributeError:
+                pass
+
         #get data
-        ydata=list(self.data['ydata'][pindex])[fit_bounds[0]:fit_bounds[1]]
-        xv=self.data['xdata'][fit_bounds[0]:fit_bounds[1]]
+        if fit_bounds:
+            ydata=list(self.data['ydata'][pindex])[fit_bounds[0]:fit_bounds[1]]
+            xv=self.data['xdata'][fit_bounds[0]:fit_bounds[1]][:]
+        else:
+            ydata=list(self.data['ydata'][pindex])
+            xv=self.data['xdata'][:]#[fit_bounds[0]:fit_bounds[1]]
+        #print ydata
+        if type(sum_fac)!=bool:
+            ydata=list(sum_fac*np.array(ydata))
+        #print ydata,sum_fac
         #check for NaN
         ff=np.where(~np.isfinite(ydata))
         if ff[0].size !=0:
-            for loc in list(ff[0]):
-              ydata.pop(loc)
-              xv.pop(loc)
+            ydata = [j for i, j in enumerate(ydata) if i not in list(ff[0])]
+            xv = [j for i, j in enumerate(xv) if i not in list(ff[0])]
+
         if not xvmid: #if xvmid is pre-defined, define it as 1+real Xmid index in order to include it
             xvmid=xv.index(0.0)
         #print xv[:xvmid],ydata[:xvmid]
@@ -339,7 +605,7 @@ class Results():
         yintplus=xpnew[yintplusidx]
         #print yintminus,ymnew[yintminus]
         #print yintplus,ypnew[yintplus]
-        b=yintplus-yintminus #degre,\es
+        b=yintplus-yintminus #degrees
 
         #calculate new ideal profile using peak theta and b
         #ww.append((p/2.) - np.abs(h*np.tan(np.deg2rad(theta))))
@@ -356,20 +622,12 @@ class Results():
         #print len(xnew),len(ynew)
         dc=np.max(ynew)
 
+        def func(xnew,w0,h,dc,yoff): #can I fit the duty cycle too?
+            return yoff+(w0-np.abs(h*np.tan(np.deg2rad((xnew-pkth)))))/(w0/dc)
+
         if fix_dc: #fix dc to equal 0.5 and adjust profiles to be consistent with this
             ynew=ynew-(dc-0.5)
             dc=0.5
-
-
-        #if fixed == 'height': #get rid of this and use scipy.optimize.curve_fit to fit both height and w0
-        #    w0=height*np.tan(np.deg2rad(b)/2.)
-        #elif fixed == 'pitch':
-        #    #if w0 is fixed, then: height = w0/np.tan(np.deg2rad(b)/2.)
-        #    height = (period*dc)/np.tan(np.deg2rad(b)/2.)
-        #    w0=period*dc
-
-        def func(xnew,w0,h,dc,yoff): #can I fit the duty cycle too?
-            return yoff+(w0-np.abs(h*np.tan(np.deg2rad((xnew-pkth)))))/(w0/dc)
 
         if not width_bounds:
             width_bounds=[0,np.inf]
@@ -382,13 +640,6 @@ class Results():
         #print [width_bounds[0],height_bounds[0]],[width_bounds[1],height_bounds[1]]
         popt, pcov=curve_fit(func,xnew,ynew,bounds=([width_bounds[0],height_bounds[0],dc_bounds[0],yoff_bounds[0]],[width_bounds[1],height_bounds[1],dc_bounds[1],yoff_bounds[1]]),absolute_sigma=True)
 
-        #calculate error from pcov
-        error = []
-        for i in range(len(popt)):
-            try:
-                error.append(np.absolute(pcov[i][i])**0.5)
-            except:
-                error.append( 0.00 )
 
         neww=func(xnew,*popt)#(w0 - np.abs(height*np.tan(np.deg2rad((xnew-pkth)))))
         #print w0,b,pkth
@@ -397,14 +648,32 @@ class Results():
         height=popt[1]
         dc=popt[2]
         yoff=popt[3]
+
+        #calculate error from difference of data to fit values...sqrt (data-fit)^2
+        #error = []
+        #perr = np.sqrt(np.diag(pcov)) yvals...
+        newpoints=func(xv,*popt)
+        error=np.mean(np.abs(ydata-newpoints))
+        #print newpoints
+        #print ydata
+        #print error
+
+        if oplot_nominal: #overplot nominal profile
+            wnom=self.nominal['pitch']/2.
+            hnom=self.nominal['height']
+            ynomvals=func(xnew, wnom,hnom,0.5,yoff)
+
+
         #plot everything
         if plot:
             fig,ax=plt.subplots()
-            ax.scatter(xv,ydata)
+            ax.scatter(xv,ydata, label='data')
             ax.plot(xnew,ynew,'--k')
-            ax.plot(xmnew,ymnew, '--g')
-            ax.plot(xpnew[:50],ypnew[:50], '--b')
-            ax.plot(xnew, yvals, 'r')
+            ax.plot(xmnew,ymnew, '--g', label='- fit')
+            ax.plot(xpnew[:50],ypnew[:50], '--b', label='+ fit')
+            ax.plot(xnew, yvals, 'r', label= 'fit')
+            if oplot_nominal:
+                ax.plot(xnew, ynomvals, '--m',label='ideal')
             ax.set_ylim([0,1])
             try:
                 ax.set_xlim([xmnew[yintminusidx-5],xpnew[yintplusidx+5]])
@@ -421,6 +690,7 @@ class Results():
             ax.text(.95*xmin,.6*ymax,'fit height: ' + str(np.round(height,3))+ ' $\mu$m')
             ax.text(.95*xmin,.5*ymax,'fit dtheta: ' + str(np.round(pkth,3)) + ' degrees')
             ax.text(.95*xmin,.4*ymax,'fit yoffset: ' + str(np.round(yoff,3)) )
+            ax.legend(loc='upper right')
             if show==True:
                 fig.show()
             else:
@@ -429,10 +699,34 @@ class Results():
             return xnew,yvals
         else: #save in results object - how do I want to visualize this though?
             valdict={'xnew':xnew, 'fit_width':w0,'fit_height':height,'fit_period':w0/dc,'peak_theta':pkth,'yvals':yvals,'dc':dc,'yoff':yoff,'pitch_nom':period,'error':error}
+            bdict={'height_bounds':height_bounds,'width_bounds':width_bounds,'dc_bounds':dc_bounds,'fit_bounds':fit_bounds}
             try:
                 self.fit_both['p'+str(pindex)]=valdict
+                self.fit_both['bounds']=bdict
+                #print 'written'
             except AttributeError:
-                self.fit_both={'p'+str(pindex):valdict}
+                self.fit_both={'p'+str(pindex):valdict,'bounds':bdict}
+            #    print 'writenew'
+
+    def print_height_stats(self):
+        fw,fh,fp,dc,dt,yoff=[],[],[],[],[],[]
+        for p in range(0,7):
+            pkey='p'+str(p)
+            fw.append(self.fit_both[pkey]['fit_width'])
+            fh.append(self.fit_both[pkey]['fit_height'])
+            fp.append(self.fit_both[pkey]['fit_period'])
+            dc.append(self.fit_both[pkey]['dc'])
+            dt.append(self.fit_both[pkey]['peak_theta'])
+            yoff.append(self.fit_both[pkey]['yoff'])
+        bounds=self.fit_both['bounds']
+        print "########### Height Stats for win",str(self.win),"##############"
+        print "Fit width: ",np.mean(fw)
+        print "Fit height: ",np.mean(fh)
+        print "Fit period: ",np.mean(fp)
+        print "Fit duty cycle: ",np.mean(dc)
+        print "Fit dtheta: ",np.mean(dt)
+        print "Fit yoffset: ",np.mean(yoff)
+        print "Bounds: ",bounds
 
     def transm_func(self,xnew,w0,h,dc,yoff,pkth=0.): #can I fit the duty cycle too?
         return yoff+(w0-np.abs(h*np.tan(np.deg2rad((xnew-pkth)))))/(w0/dc)
@@ -457,11 +751,185 @@ class Results():
         print np.shape(yvec)
         return yvec
 
-    def scat_allP(self,meanfit=True,figname=False,theta_ran=False,print_height=False,yran=False,fit=False,compare_nominal=False):
+    def period_vs_angle(self,pix2um=.65,yran=False, fit=True,plot=True):
+        rpp=self.data['raw_periods_A'] #plot errorbars...
+        mpp=self.data['mean_periods_P']
+        xv=np.array(self.data['xdata']) #angles
+        labels=['p0','p1','p2','p3','p4','p5','p6']
+
+
+            #ax.(xv,np.ma.array(mp)*pix2um,label=labels[i])
+        if fit: #do polyfit of a quadratic to the data
+            z=np.polyfit(xv,np.ma.mean(mpp,axis=0),2)
+            fityvals=np.poly1d(z)#a*xv**2. + b*xv + c
+            #print the vertex x=-b/2a
+
+        if plot:
+            fig,ax=plt.subplots()
+            for i,mp in enumerate(mpp):
+                yerr=[np.ma.std(rpp[i][j])*pix2um for j in range(0,len(mp))]
+                ax.errorbar(xv,np.ma.array(mp)*pix2um,fmt='o',yerr=np.array(yerr),label=labels[i])
+            ax.plot(xv,fityvals(xv)*pix2um, '--k', label= 'best fit')
+            print 'vertex : (', np.rad2deg(-1.*z[1]/(2.*z[0])),' degrees,', np.max(fityvals(xv))*pix2um, ' um)'
+            ax.legend(loc='upper left')
+            ax.set_xlim([xv[0]-.5,xv[-1]+.5])
+            ax.set_xlabel('tan $\\theta$')
+            ax.set_ylabel('Period ($\mu$m)')
+
+            if yran:
+                ax.set_ylim(yran)
+            fig.show()
+
+        return fityvals(xv) #in pixels
+
+    def period_hist(self,adjust_p0=False,pix2um=.65,stats=True):
+        '''if adjust_p0, use calc_p0 to fix'''
+        rpp=self.data['raw_periods_A'] #plot errorbars...
+        #mpp=self.data['mean_periods_P']
+        #xv=np.array(self.data['xdata']) #angles
+        #labels=['p0','p1','p2','p3','p4','p5','p6']
+        periods=rpp.flatten() #this is now 49x?
+        flatperiods=[]
+
+        for p in periods:
+            pl=list(p)
+            if flatperiods !=[]:
+                flatperiods.extend(pl)
+            else:
+                flatperiods=pl
+
+        flatperiods=pix2um*np.array(flatperiods)
+        flatperiods.sort()
+        aa=np.where(np.isnan(flatperiods))
+        if aa != np.array([]):
+            flatperiods=flatperiods[:aa[0][0]]
+        bins=np.arange(np.nanmin(flatperiods),np.nanmax(flatperiods),np.nanstd(flatperiods)/5.)
+        fig,ax=plt.subplots()
+        ax.hist(flatperiods,bins)
+        ax.set_yscale('log')
+        ax.set_xlim([.9*self.nominal['pitch'],1.1*self.nominal['pitch']])
+        ax.set_xlabel('tan $\\theta$')
+        fig.show()
+
+        stats={"num":np.shape(flatperiods),"mean":np.nanmean(flatperiods),"med":np.nanmedian(flatperiods),"stddev":np.nanstd(flatperiods)}
+        if stats: #print
+            print "-------------------STATISTICS FOR WINDOW "+str(self.win)+"---------------------"
+            print '              Mean P: ' + str(stats['mean'])
+            print '            Median P: ' + str(stats['med'])
+            print 'Standard Deviation P: ' + str(stats['stddev'])
+            print '               Num P: ' + str(stats['num'])
+        self.period_stats=stats
+
+
+    def calc_p0(self,recalc_ydata=False):
+        ''' calulate period at real theta=0 using parabolic fit'''
+        fyvals=self.period_vs_angle(fit=True,plot=False)
+        #th0=
+        p0=np.max(fyvals)
+
+        #put it in the object.... later use it to re-plot and fit the profile
+        self.data['period_0']=p0
+        if recalc_ydata: #recalculate w_m/p0 using new p0
+            ynew=self.data['mean_widths_P']/p0
+            self.data['ydata']=np.array(ynew)
+
+######################### make TeX table entry ##############################
+
+    def opt_stats_tex(self, do_print=True):
+        ''' for the results table. win | npitch | pmean | pmean - npitch | pdev | preq | nang | amean | amean -nang | adev | areq'''
+        def rv(value):
+            return str(np.round([value],decimals=4)[0])
+        win=str(self.win)
+        side=self.kind['side']
+        npitch=self.nominal['pitch']
+        try:
+            nang=self.nominal['nominal angle']
+        except KeyError:
+            nang=self.nominal['orientation']
+        req = self.requirements
+        pstats=self.period_stats
+        astats=self.angle_stats
+        if type(astats['mean']) == np.ma.core.MaskedArray:
+            amean=float(astats['mean'].data)
+            #adev=float(astats['stddev'].data)
+        else:
+            amean=astats['mean']
+        adev=astats['stddev']
+        line=win + ' & ' + str(npitch) +' & '+rv(pstats['amean'])+' & '+rv(pstats['amean']-npitch)+' & '+rv(pstats['adev'])+' & '+ rv(req['pitch'])+ ' & '+ str(nang) +' & '+rv(amean)+' & '+rv(np.abs(amean)-np.abs(nang))+' & '+rv(adev)+' & '+ rv(req['angle'])+' \\\\'
+        self.tex['stats']=line
+        if do_print:
+            print line
+
+    def opt_params_tex(self,do_print=True):
+        ''' for the params table'''
+        def rv(value):
+            return str(np.round([value],decimals=4)[0])
+
+        win=str(self.win)
+        params=self.calc_params
+        for p in params.keys():
+            params[p]=str(params[p])
+
+        line=win + ' & ' + params['csigma'] +' & '+ params['ll'] +' & '+params['spread']+' & '+params['n_hough']+' & '+ params['htol']+ ' & '+ params['sigma'] +' & '+params['tol']+' & '+ params['r_or_f_tol'] +' \\\\'
+        self.tex['params']=line
+        if do_print:
+            print line
+
+    #do the same for X-ray results
+    def xray_stats_tex(self, do_print=True):
+        ''' for the results table. win | npitch | pmean | pmean - npitch | pdev | preq | nang | amean | amean -nang | adev | areq'''
+        def rv(value):
+            return str(np.round([value],decimals=4)[0])
+        win=str(self.win)
+        side=self.kind['side']
+        npitch=self.nominal['pitch']
+        try:
+            nang=self.nominal['nominal angle']
+        except KeyError:
+            nang=self.nominal['orientation']
+        #req = self.requirements
+        pstats=self.period_stats
+        astats=self.angle_stats
+        th0=astats['theta0']
+        amean=np.nanmean(astats['theta'])
+        adev=astats['theta_std']
+
+        line=win + ' & ' + str(npitch) +' & '+rv(pstats['mean'])+' & '+rv(pstats['mean']-npitch)+' & '+rv(pstats['stddev'])+ ' & '+ str(nang) +' & '+rv(amean) +' & '+str(th0)+' & '+rv(adev)+' \\\\'
+        self.tex['stats']=line
+        if do_print:
+            print line
+
+    def xray_fit_stats_tex(self, do_print=True):
+        ''' for the results table. win | npitch | fit pitch | fit width | fit dc | height '''
+        def rv(value):
+            return str(np.round([value],decimals=4)[0])
+        win=str(self.win)
+        side=self.kind['side']
+        npitch=self.nominal['pitch']
+        try:
+            nang=self.nominal['nominal angle']
+        except KeyError:
+            nang=self.nominal['orientation']
+        #req = self.requirements
+        pstats=self.period_stats
+        astats=self.angle_stats
+        amean=astats['theta']
+        adev=astats['theta_std']
+        line=win + ' & ' + str(npitch) +' & '+rv(pstats['mean'])+' & '+rv(pstats['mean']-npitch)+' & '+rv(pstats['stddev'])+ ' & '+ str(nang) +' & '+rv(amean)+' & '+rv(np.abs(amean)-np.abs(nang))+' & '+rv(adev)+' \\\\'
+        self.tex['stats']=line
+        if do_print:
+            print line
+
+######################PLOT FUNCTIONS##########################
+
+    def scat_allP(self,meanfit=True,figname=False,theta_ran=False,print_height=False,yran=False,yran2=False,fit=False,compare_nominal=False,widths_only=False):
         win=self.win
         if fit == False:
             xv=self.data['xdata']
-            sumvecs=self.data['ydata']
+            if widths_only:
+                sumvecs=self.data['mean_widths_A']
+            else:
+                sumvecs=self.data['ydata']
             xvmid=xv.index(0.0)
             lnsty='o-'
         elif fit == 'height': #plot the fits
@@ -476,7 +944,10 @@ class Results():
             lnsty='-'
         elif fit == 'both':
             xv=self.data['xdata']
-            sumvecs=self.data['ydata']
+            if widths_only:
+                sumvecs=self.data['mean_widths_A']
+            else:
+                sumvecs=self.data['ydata']
             xvmid=xv.index(0.0)
             lnsty='o-'
             compare_nominal=True
@@ -490,8 +961,8 @@ class Results():
         fitsminus=[]
         errvecs=[]
 
-        meanvec=np.ma.mean(sumvecs,axis=0)
-        fplus=np.polyfit(xv[:xvmid-1],meanvec[:xvmid-1],1)
+        meanvec=np.nanmean(sumvecs,axis=0)
+        fplus=np.polyfit(xv[:xvmid],meanvec[:xvmid],1) #formerly xvmid -1
         fminus=np.polyfit(xv[xvmid+1:],meanvec[xvmid+1:],1)
         #print np.min(svsort), np.max(svsort),fplus,fminus
         fitsplus.append(fplus)
@@ -521,12 +992,12 @@ class Results():
         else:
             ax[0].set_ylim(yran)
         if meanfit:
-            meanplusslope=np.mean([fp[0] for fp in fitsplus])
-            meanplusintercept=np.mean([fp[1] for fp in fitsplus])
+            meanplusslope=np.nanmean([fp[0] for fp in fitsplus])
+            meanplusintercept=np.nanmean([fp[1] for fp in fitsplus])
             meanplusline=meanplusslope*np.array(xv[:xvmid+1]) + meanplusintercept
             #print meanplusline
-            meanminusslope=np.mean([fm[0] for fm in fitsminus])
-            meanminusintercept=np.mean([fm[1] for fm in fitsminus])
+            meanminusslope=np.nanmean([fm[0] for fm in fitsminus])
+            meanminusintercept=np.nanmean([fm[1] for fm in fitsminus])
             meanminusline=meanminusslope*np.array(xv[xvmid:]) + meanminusintercept
             lineintx,lineinty=ag.get_intersect(meanplusslope,meanminusslope,meanplusintercept,meanminusintercept)
             #print meanminusline
@@ -545,13 +1016,16 @@ class Results():
 
         #ax.set_ylim([0,1.1])
         #ax.set_xlim([xv[0],xv[-1]])
-        ax[1].set_xlabel('tan(Angle)') #should I set the lables to the actual angle values? xaxlabels... but they would be in the wrong place
+        ax[1].set_xlabel('Angle (degrees)') #should I set the lables to the actual angle values? xaxlabels... but they would be in the wrong place
     #     if widths:
     #        ax[0].set_title('Window '+ win + ' slit width as a function of angle')
     #        ax[0].set_ylabel('Slit width ($\mu$m)')
     #    else:
         ax[0].set_title('Window '+ str(win) + ' analyzed with '+ self.method + ' method')
-        ax[0].set_ylabel('Percent of maximum transmission')
+        if widths_only:
+            ax[0].set_ylabel('Slit Width ($\mu$m)')
+        else:
+            ax[0].set_ylabel('Percent of maximum transmission')
         ax[0].legend(loc='upper right')
 
         #make the lower subplot showing the error bars
@@ -569,7 +1043,10 @@ class Results():
                 ax[1].plot(xv,yv,lnsty,color=c,label=lab)
                 #ax[1].errorbar(xv,yv,yerr=err)
             ax[1].axhline(color='k',linestyle='dashed')
-            ax[1].set_ylim([np.ma.min(errvecs),np.ma.max(errvecs)])
+            if yran2:
+                ax[1].set_ylim(yran2)
+            else:
+                ax[1].set_ylim([np.ma.min(errvecs),np.ma.max(errvecs)])
 
         if compare_nominal: #compare with the nominal profiles that were calculated
             sumvecs_nom=[self.nominal_transm_prof['p'+str(p)] for p in range(0,7)]
@@ -596,7 +1073,10 @@ class Results():
                 heights,meanheight=calc_height_from_fit(xv,fp[0],fp[1],fm[0],fm[1])
                 print 'p',i,' mean height: ', meanheight
         #return xv,sumvecs,errvecs
-        if not self.errors:
+        try:
+            if not self.errors:
+                self.errors=errvecs
+        except AttributeError:
             self.errors=errvecs
 
     def fit_hists(width=True, height=False, dtheta=False):
@@ -690,3 +1170,82 @@ class Results():
             return vdict
 
 
+    def plot_angle_hist(self,mask45=False,imtag=False):
+        '''what it sounds like. for optical. wrapper for ag.hough_hist'''
+        win=self.win
+        try:
+            nang=self.nominal['nominal angle']
+        except KeyError:
+            nang=self.nominal['orientation']
+        htol=int(self.calc_params['htol'])
+        spread=float(self.calc_params['spread'])
+        folder=self.kind['folder']
+        if not imtag:
+            figname='win'+str(win) + 'ang_hist.png'
+        else:
+            figname='win'+str(win) + 'ang_hist'+imtag+'.png'
+        os.chdir(folder)
+        hough_all=glob.glob('win'+str(win)+'*_5.0X_corrected_hough_all.p')
+        ag.hough_hist(hough_all,win,nang,figname=figname,tol=htol,spread=spread,mask45=mask45)
+        os.chdir('../..')
+
+
+    def plot_period_hist(self,key='slat',filtered=True, rfp=False,nbins=False,xran=False):
+        '''what it sounds like. for optical'''
+        #from analyze_optical
+        #make the histogram
+        npitch=self.nominal['pitch']
+        if not nbins:
+            bins=np.arange(npitch-npitch/10., npitch+npitch/10., npitch/40.)
+        else:
+            bins=np.linspace(.9*npitch,1.1*npitch,nbins)
+        if key == 'slit' or key == 'slat':
+            if filtered:
+                dkey='filtered_periods_'+key
+            else:
+                dkey='periods_from_'+key+'_centers'
+        else:
+            dkey=key
+
+        periods=self.data[dkey]
+
+        if rfp:
+            periodr=self.data['rising']
+            periodf=self.data['falling']
+            from_c=self.data['periods_from_slat_centers']
+            from_c2=self.data['periods_from_slit_centers']
+            fig,ax=plt.subplots(1,3,sharex=True,sharey=True)
+            ax[0].hist(periodr,bins,facecolor='g')
+            ax[1].hist(periodf,bins,facecolor='r')
+            ax[2].hist(from_c,bins,facecolor='b',alpha=0.6)
+            ax[2].hist(from_c2,bins,facecolor='m',alpha=0.6)
+
+            #ax[2].hist(filtered_c,bins,facecolor='b',alpha=0.6)
+            #ax[2].hist(filtered_c2,bins,facecolor='m',alpha=0.6)
+            ax[0].set_xlim([bins[0],bins[-1]])
+            ax[0].set_title('Rising')
+            ax[1].set_title('Falling')
+            ax[2].set_title('Win'+str(self.win)+' Total')
+            ax[0].set_xlabel('Period $\mu$m')
+            ax[0].set_ylabel('Counts')
+            ax[0].set_yscale('log')
+            ax[0].set_ylim([1,10000])
+            #figfilename='win'+str(win)+'_group_periods5.0X'+ftags+'.png'
+            #fig.savefig(figfilename)
+            fig.show()
+
+        else: #just one histogram
+            fig,ax=plt.subplots()
+            ax.hist(periods,bins,facecolor='g')
+            if not xran:
+                ax.set_xlim([bins[0],bins[-1]])
+            else:
+                ax.set_xlim(xran)
+            ax.set_title(str(self.win)+ ' ' + dkey)
+            ax.set_xlabel('Period $\mu$m')
+            ax.set_ylabel('Counts')
+            ax.set_yscale('log')
+            ax.set_ylim([1,10000])
+            #figfilename='win'+str(win)+'_group_periods5.0X'+ftags+'.png'
+            #fig.savefig(figfilename)
+            fig.show()

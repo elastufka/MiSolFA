@@ -21,12 +21,12 @@ import numpy as np
 import glob
 import imager
 
-def get_objects(slit_material,thicknesses):
+def get_objects(slit_material,thicknesses,sub='C'):
     '''Assume substrate is C'''
     objects=[]
     for th in thicknesses:
         int_th=int(float(th[:-2])*1000.)
-        o=imager.Imager(slits=[slit_material,str(int_th)],substrate=['C',str(int_th)],filled=True)
+        o=imager.Imager(slits=[slit_material,str(int_th)],substrate=[sub,str(int_th)],filled=True)
         objects.append(o)
     return objects
 
@@ -169,3 +169,113 @@ def make_plot_proposal(material=['Steel','W'],xlog=True):
 
     fig.show()
 
+def make_plot_HXI(material=['Au','W'],thick='1.0mm',xlog=True,title=False):
+    '''Assumes a series of Imager objects are stored in the given location. Should be easily adaptable to values read from a spreadsheet however'''
+    #titles=['Steel slats, Carbon substrate','Tungsten slats, Carbon substrate']
+    allslats,allsubs=[],[]
+    energies=[]
+    subs=['C','Si']
+    for i,m in enumerate(material):
+        objects=get_objects(m,[thick],sub=subs[i])
+        fig,ax=plt.subplots()
+        obj=objects[0]
+        energy=list(obj.slits['Energy'])
+        #eff_area=list(obj.eff_area)
+        sub=list(obj.substrate['eff_area'])
+        slats=list(obj.slits['eff_area'])
+        #print sub[-1],slats[-1]
+        energy.extend(list(np.arange(433,1000,2)))
+        energies.append(energy)
+        #eff_area.extend(list(eff_area[-1]+np.zeros(284)))
+        sub.extend(list(sub[-1]+np.zeros(284)))
+        slats.extend(list(slats[-1]+np.zeros(284)))
+        allslats.append(slats)
+        allsubs.append(sub)
+        slatt=np.array(slats)*(.5*np.array(sub))
+        #print len(energy),len(sub)
+
+    ax.plot(energy, np.array(allsubs[0]),label='C',linewidth='2')
+    ax.plot(energy, np.array(allsubs[1]),label='Si',linewidth='2')
+    ax.plot(energy, 2*np.array(allslats[0]), label='Au', color="m",linewidth='2')
+    ax.plot(energy, 2*np.array(allslats[1]),color='c',linewidth='2',label='W')
+    ax.plot(energy, np.array(allsubs[0])-2*np.array(allslats[0]), label='C-Au', color="k",linewidth='2')
+    ax.plot(energy, np.array(allsubs[0])-2*np.array(allslats[1]),color='r',linewidth='2',label='Si-W')
+    ax.legend(loc='lower right')
+    ax.grid(which='both')
+    ax.set_xlabel('Energy (keV)')
+    ax.set_ylabel('Transmission')
+    ax.set_ylim([0.001,2])
+    ax.set_yscale('log')
+    if xlog:
+        ax.set_xscale('log')
+        ax.set_xlim([0,1000])
+    else:
+        ax.set_xlim([0,120])
+    #plt.title("Transmission probability for a single grid "+ obj.slits['Material'] + ' '+ obj.substrate['Thickness'] + '$\mu$m, ' + obj.slits['Material'])
+        #plt.title(titles[i])
+    #l1=ax.legend(["total","slits (C)","slats (C + Au)"],title='Minimum Configuration',bbox_to_anchor=(.99,.47),fontsize='medium', frameon=False)
+    #ax.legend(loc="lower right")
+    #l2=ax.legend([p1,p2,p3],["total","slits (C)","slats (C+Au)"],title='Engineering Model',bbox_to_anchor=(.955,.25),fontsize='medium', frameon=False)
+    #plt.gca().add_artist(l1)
+    if title:
+        ax.set_title(title)
+
+    fig.show()
+
+def make_plot_HXI_linear(material=['Au','W'],thick=['.25mm','1.0mm'],xlog=True,title=False):
+    '''Assumes a series of Imager objects are stored in the given location. Should be easily adaptable to values read from a spreadsheet however'''
+    #titles=['Steel slats, Carbon substrate','Tungsten slats, Carbon substrate']
+    allslats,allsubs=[],[]
+    energies=[]
+    subs=['C','Si']
+    for i,m in enumerate(material):
+        for t in thick:
+            objects=get_objects(m,[t],sub=subs[i])
+            obj=objects[0]
+            energy=list(obj.slits['Energy'])
+            #eff_area=list(obj.eff_area)
+            sub=list(obj.substrate['eff_area'])
+            slats=list(obj.slits['eff_area'])
+            #print sub[-1],slats[-1]
+            energy.extend(list(np.arange(433,1000,2)))
+            energies.append(energy)
+            #eff_area.extend(list(eff_area[-1]+np.zeros(284)))
+            sub.extend(list(sub[-1]+np.zeros(284)))
+            slats.extend(list(slats[-1]+np.zeros(284)))
+            allslats.append(slats)
+            allsubs.append(sub)
+            slatt=np.array(slats)*(.5*np.array(sub))
+        #print len(energy),len(sub)
+    print np.shape(allslats),np.shape(allsubs)
+    fig,ax=plt.subplots()
+
+    #ax.plot(energy, np.array(allsubs[0]),label='C',linewidth='2')
+    #ax.plot(energy, np.array(allsubs[1]),label='Si',linewidth='2')
+    #ax.plot(energy, 2*np.array(allslats[0]), label='Au', color="m",linewidth='2')
+    ax.plot(energy, 1.0-2*np.array(allslats[2]),color='g',linewidth='2',label='.25 mm W')
+    ax.plot(energy, np.array(allsubs[0])-2*np.array(allslats[0]), label='.25 mm C-Au', color="k",linewidth='2')
+    ax.plot(energy, 1.0-2*np.array(allslats[3]),'m--',linewidth='2',label='1mm W')
+    ax.plot(energy, np.array(allsubs[1])-2*np.array(allslats[1]), "b--", label='1mm C-Au',linewidth='2')
+    #ax.plot(energy, np.array(allsubs[0])-2*np.array(allslats[1]),color='r',linewidth='2',label='Si-W')
+    ax.legend(loc='lower center')
+    ax.grid(which='both')
+    ax.set_xlabel('Energy (keV)')
+    ax.set_ylabel('Transmission')
+    ax.set_ylim([0,1.1])
+    ax.set_xlim([3,400])
+    #ax.set_yscale('log')
+    if xlog:
+        ax.set_xscale('log')
+        #ax.set_xlim([0,1000])
+    else:
+        ax.set_xlim([0,120])
+    #plt.title("Transmission probability for a single grid "+ obj.slits['Material'] + ' '+ obj.substrate['Thickness'] + '$\mu$m, ' + obj.slits['Material'])
+        #plt.title(titles[i])
+    #l1=ax.legend(["total","slits (C)","slats (C + Au)"],title='Minimum Configuration',bbox_to_anchor=(.99,.47),fontsize='medium', frameon=False)
+    #ax.legend(loc="lower right")
+    #l2=ax.legend([p1,p2,p3],["total","slits (C)","slats (C+Au)"],title='Engineering Model',bbox_to_anchor=(.955,.25),fontsize='medium', frameon=False)
+    #plt.gca().add_artist(l1)
+    if title:
+        ax.set_title(title)
+
+    fig.show()

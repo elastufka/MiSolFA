@@ -3,7 +3,7 @@
 grating.py
 Erica  Lastufka 15.5.11
 ===================
-Given the ideal grid parameters, simulate the transmission images/profiles I should get out of them. For a SINGLE grating. 
+Given the ideal grid parameters, simulate the transmission images/profiles I should get out of them. For a SINGLE grating.
 
 """
 import numpy as np
@@ -24,7 +24,7 @@ def calc_3D_grating(param_dict,source=False,size=[.05,.05]):
     '''Do the actual calculation, the other two are just wrapper methods'''
     #self.nominal={"pitch":,"orientation":,"phase":,"height":,"slit_width":]}
     #probably need the size too
-        
+
     #get the pixel to um conversion
     if not source:
         pix2um=1.
@@ -56,7 +56,7 @@ def calc_3D_grating(param_dict,source=False,size=[.05,.05]):
         else:
             angle_factor=-1*tan_frac.denominator #-1 in this case indicates that it's less than 1
     #print np.round(tan,1), tan_frac, angle_factor
-    
+
     #put 1's where the grid slats are. Probably easiest to do this row-by row
     #define phase to be the offset of the rising edge of the first slat w.r.t. corner (0,0,*) in the array
     for i in range(0,arry):
@@ -85,7 +85,7 @@ def calc_3D_grating(param_dict,source=False,size=[.05,.05]):
             phase_pix=phase_pix+-1*angle_factor
             #if phase_pix >width_pix:
             #    phase_pix=-width_pix
-        
+
     return arrx,arry,garr
 
 def random_gen(low, high):
@@ -94,7 +94,7 @@ def random_gen(low, high):
 
 
 def test_thickness_error(arr,dev,elen,percent,slat_width=False):
-    #first flatten array 
+    #first flatten array
     import time
     import itertools
     arr2d=np.sum(arr,axis=2)
@@ -126,7 +126,7 @@ def test_thickness_error(arr,dev,elen,percent,slat_width=False):
     #3D gaussian smooth to get rid of discontinuities
     #first make it a masked array so that the edges are preserved
     smoothed_arr=arr2d
-                
+
     #re-inflate arr2D
     ashape=np.shape(arr)
     errarr=np.zeros([ashape[0],ashape[1],ashape[2]+dev])
@@ -165,7 +165,20 @@ def plot1Dslice(arr3d,y):
     #ax.set_ylim([-1,2])
     fig.show()
 
-    
+def test_transm_plot():
+    theta=np.array([-5,-4,-3,-2,-1,0,1,2,3,4,5])
+    h=250.#250. #um
+    pp=[88.,89.,90.,91.,92.] #um
+    ww=[]
+    for p in pp:
+        ww.append((p/2.) - np.abs(h*np.tan(np.deg2rad(theta))))
+    fig,ax=plt.subplots()
+    for w,p in zip(ww,pp):
+        ax.plot(theta,w/p,label=str(p))
+    ax.legend()
+    fig.show()
+
+
 #if __name__ == "__main__":
     #param_dict={"period":15,"orientation":45,"phase":0,"height":250,"slit_width":7.5}
     #arrx,arry,garr=calc_3D_grating(param_dict)

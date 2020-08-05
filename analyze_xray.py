@@ -23,10 +23,21 @@ import time
 import glob
 import analyze_general as ag
 import results
+import os
+from grating import cbp
 
-def analyze_window(win,model,data_dict, method,tolvec=False,sigma=False):
+def analyze_window(grating,j, method,tolvec=False,sigma=False,angle_only=False,psigma=2.):
     '''Run the whole analysis for a window. Return a Results object'''
     #prep: check for processing level of the files. should be at least level 1 (renamed)
+    win=grating.win
+    model=grating.model
+    folder=grating.data.Xdata.path
+    side=grating.side
+    nominal=grating.nominal
+    data_dict=grating.data.Xdata.transm[j]
+    flags=data_dict['flags']
+    #os.chdir(data_dict['folder'])
+
     updates=[]
     pkeys=data_dict.keys() #i is the number of folders - for ex. there might have been a correction directory
     if 'level02' not in pkeys: #need to flatdark correct
@@ -48,15 +59,62 @@ def analyze_window(win,model,data_dict, method,tolvec=False,sigma=False):
         updates.append({'key':'level03', 'data':cstretch})
         data_dict['level03']=cstretch
 
-    if 'level04' not in pkeys: #need to groupstretch
-        gs={}
-        for k in data_dict['level02'].keys():
-            gs[k]=ag.contrast_stretch_group(data_dict['level02'][k],saveim=True)
-        updates.append({'key':'level04','data':gs}) #should use the flatdark correct ones for this
-        data_dict['level04']=gs
+#     if 'level04' not in pkeys: #need to groupstretch IF p0-7 exists
+#         gs={}
+#         for k in data_dict['level02'].keys():
+#             gs[k]=ag.contrast_stretch_group(data_dict['level02'][k],saveim=True)
+#         updates.append({'key':'level04','data':gs}) #should use the flatdark correct ones for this
+#         data_dict['level04']=gs
 #         except KeyError: #have to use the 'updates' dict
 #             gs = ag.groupstretch(updates[0]['data'])
 #             updates.append({'key':'level04','data':ag.groupstretch(updates[0]['data'])}) #should use the flatdark correct ones for this
+
+    if angle_only: #just calculate the relative orientations of line fits to images
+        dkeys=[k for k in data_dict['level03'].keys() if k != 'flagged']
+        if 'level05' not in pkeys: #need to get edges
+            nvec={}
+            nlist=[]
+            for k in dkeys:
+                for im in data_dict['level03'][k]:
+                    _,nfn=ag.Canny_edge(im,mag=False)
+                    nlist.append(nfn)
+                nvec[k]=nlist
+            updates.append({'key':'level05', 'data':nvec}) #shouldn't this be sorted by p though?
+            data_dict['level05']=nvec
+        if 'level06' not in pkeys: #need to do Hough line fits
+            nvec={}
+            nlist=[]
+            for k in dkeys:
+                for im in data_dict['level05'][k]:
+                    ag.prob_hough(im,0.0,line_length=200,spread=2.,tag='ll200',overwrite=True)
+                    nfn=im[:-7]+'hough_ll200.p'#,'rb'
+                    nlist.append(nfn)
+                nvec[k]=nlist
+            updates.append({'key':'level06', 'data':nvec}) #shouldn't this be sorted by p though?
+            data_dict['level06']=nvec
+        #need to do this one file at a time
+        #hdata=np.mean(data_dict['level06']['data'])
+        figname='win'+str(win)+'_hough_hist.png'
+        hfiles=[]
+        for k in dkeys:
+            hfiles.extend(data_dict['level06'][k])
+        theta=ag.hough_hist(hfiles,win,0.0,figname=figname,spread=2.,mask45=False,ret=True) #make histogram
+
+        #add theta to what's in the logfile...
+        theta0=read_logfile(data_dict['folder']+'.log', win)
+
+        try:
+            grating.results['widths'].angle_stats={'theta0':theta0,'theta':theta,'theta_std':np.nanstd(theta)}
+            return [], grating.results['widths']
+
+        except AttributeError or KeyError:
+            pass
+        #xpeaks=[]#clean centers, sum peaks
+        #theta_dict=ag.angle_by_index(hdata,xpeaks)#check angle vs index
+        #res=results.Results(win,'transm','angles',False,{'theta':theta,'theta_dict':theta_dict},params={'tolvec':tolvec, 'sigma':sigma})
+        #return updates, res
+
+    kind ={'type':'transm','model':model,'folder':folder,'side':side}
 
     if method =='widths': #need edges and such
         if 'level05' not in pkeys: #need to edge
@@ -78,46 +136,43 @@ def analyze_window(win,model,data_dict, method,tolvec=False,sigma=False):
 
     #now execute the chosen method
     if method == 'sum':
-        xv,sv=basic_sum_allP(data_dict['level04'])
+        xv,sv=basic_sum_allP(data_dict['level04'],flags=flags) #IF NOT FLAGGED
         #xvec,sumvec,errvec=scat_allP(win,xv,sv)
-        #    def __init__(self,kind,method, errors, data,filenames=False,stats=False):
+        tdata={'xdata':xv,'ydata':sv}
+        res=results.Results(win,kind,flags,method='sum',data=tdata,nominal=nominal)
 
-        res=results.Results(win,'transm','sum',False,{'xdata':xv,'ydata':sv})
     elif method == 'binary':
         xv,sv=basic_sum_allP(data_dict['level02'],binary=True)
         #xvec,sumvec,errvec=scat_allP(win,xv,sv)
         res=results.Results(win,'transm','binary',False,{'xdata':xv,'ydata':sv})
     elif method == 'widths':
         #run batch_window
-        if tolvec and sigma:
-            xvec,sumvecp,sumveca,sumpp,sumpa=calc_widths_allP(win,data_dict['level03'],tolvec=tolvec,sigma=sigma)
-        else:
-            xvec,sumvecp,sumveca,sumpp,sumpa=calc_widths_allP(win,data_dict['level03'])
+        xvec,sumvecp,sumveca,sumpp,sumpa=calc_widths_allP(win,data_dict['level03'],flags,tolvec=tolvec,sigma=sigma,rotang=False,psigma=psigma)
 
         meanvecp,meanpp=[],[]
         maskvecp,maskpp=False,False
-        try:
-            flags=data_dict['level03']['flagged']
-            maskvecp,maskpp=[],[]
+        #try:
+        #    flags=data_dict['level03']['flagged']
+        #    maskvecp,maskpp=[],[]
 
-        except KeyError:
-            flags=[]
+        #except KeyError:
+        #    flags=[]
         for p in range(0,7):
             meanvecp.append([np.mean(sumvecp[i,p]) for i in range(0,len(xvec))])
             meanpp.append([np.mean(sumpp[i,p]) for i in range(0,len(xvec))])
             #build masks too
-            if flags !=[]:
-                lvecp,lpp=[],[]
-                fullimnames=['win'+str(win)+'_p'+str(p)+'_'+str('{:g}'.format(x))+'_corrected.tif' for x in xvec]
-                for im in fullimnames:
-                    if im in flags:
-                        lvecp.append(True)
-                        lpp.append(True)
-                    else:
-                        lvecp.append(False)
-                        lpp.append(False)
-                maskvecp.append(lvecp)
-                maskpp.append(lpp)
+            #if flags !=[]:
+            #    lvecp,lpp=[],[]
+            #    fullimnames=['win'+str(win)+'_p'+str(p)+'_'+str('{:g}'.format(x))+'_corrected.tif' for x in xvec]
+            #    for im in fullimnames:
+            #        if im in flags:
+            #            lvecp.append(True)
+            #            lpp.append(True)
+            #        else:
+            #            lvecp.append(False)
+            #            lpp.append(False)
+            #    maskvecp.append(lvecp)
+            #    maskpp.append(lpp)
 
 
         meanvecp=np.ma.array(meanvecp,mask=maskvecp)
@@ -130,20 +185,27 @@ def analyze_window(win,model,data_dict, method,tolvec=False,sigma=False):
         meanpa=np.transpose(meanpp)#np.mean(sumveca,axis=1)
         ydata=meanvecp/meanpp #duty cycle, grouped by p
         ydataa=meanveca/meanpa #duty cycle, grouped by angle
-        res=results.Results(win,'transm','widths',False,{'xdata':xvec,'ydata':ydata,'mean_ang':ydataa, \
-                                                     'raw_widths_P':sumvecp,'raw_widths_A':sumveca, \
-                                                    'raw_periods_P':sumpp,'raw_periods_A':sumpa, \
-                                                    'mean_widths_P':meanvecp,'mean_widths_A':meanveca, \
-                                                    'mean_periods_P':meanpp,'mean_periods_A':meanpa},params={'tolvec':tolvec, 'sigma':sigma})
+        #win,kind,method=False,errors=False,data=False,nominal=False,filenames=False,stats=False,params=False):
+
+        if angle_only:
+            tdata={'xdata':xvec,'ydata':ydata,'mean_ang':ydataa, 'raw_widths_P':sumvecp,'raw_widths_A':sumveca,'raw_periods_P':sumpp,'raw_periods_A':sumpa,'mean_widths_P':meanvecp,'mean_widths_A':meanveca,'mean_periods_P':meanpp,'mean_periods_A':meanpa,'theta0':theta0,'theta':theta, 'theta_std':np.nanstd(theta)}
+        else:
+            tdata={'xdata':xvec,'ydata':ydata,'mean_ang':ydataa, 'raw_widths_P':sumvecp,'raw_widths_A':sumveca,'raw_periods_P':sumpp,'raw_periods_A':sumpa,'mean_widths_P':meanvecp,'mean_widths_A':meanveca,'mean_periods_P':meanpp,'mean_periods_A':meanpa}
+        params={'tolvec':tolvec, 'sigma':sigma}
+        res=results.Results(win,kind,flags,method='widths',data=tdata,nominal=nominal,params=params)
 
     return updates,res
 
-def calc_widths_allP(win,data_dict,tolvec=False,sigma=False):
+def calc_widths_allP(win,data_dict,flags,tolvec=False,sigma=False,rotang=False,psigma=2.0):
     '''should I deal with flagged data here? send the arrays back as masked arrays? '''
     widths,allwidths,allperiods,check=[],[],[],[]
     files=data_dict['p0']
+    if "/" in files[0]:
+        filest=[f[f.rfind("/"):] for f in files]
+    else:
+        filest=files
     #flags=data_dict['flagged']
-    xvec=[float(im[im.find("_")+4:-14]) for im in files]
+    xvec=[float(im[im.find("_")+4:-14]) for im in filest] #18 if filest is corrected_edges
     xvec.sort()
     xvecstr=[str(xv) for xv in xvec]
     for k,xv in enumerate(xvecstr):
@@ -154,19 +216,37 @@ def calc_widths_allP(win,data_dict,tolvec=False,sigma=False):
     for i,p in enumerate(range(0,7)):
         for j,ang in enumerate(xvecstr):
             fnames=data_dict['p'+str(p)]
-            im=[fn for fn in fnames if fn=='win'+str(win)+'_p'+str(p)+'_'+ang+'_corrected.tif'][0]
+            #im=[fn for fn in fnames if
+            im='win'+str(win)+'_p'+str(p)+'_'+ang+'_corrected.tif'#][0]
             if tolvec:
                 tol=tolvec[j]
             else:
                 tol=6
             #print im
-            pp,ww,ck=ag.slit_widths_from_peaks(win,im,plot=False,tolerance=sigma,n=tol) #do even if flagged
-            if ck: #and im not in flags:
+            if rotang: #get mean angle from hough lines
+                lines=pickle.load(open('win'+str(win)+'_p'+str(p)+'_'+ang+'_corrected_hough_ll200.p','rb'))
+                grouped_lines=ag.same_line(lines,0.0,tol=2)
+                for gl in grouped_lines:
+                    theta=np.mean([ag.get_angle(g) for g in gl])
+                rang=90.-np.mean(theta)
+                if rang < 0.25:
+                    rang = False
+            else:
+                rang = False
+
+            pf,pr,pp,ww,ca,ci,ck=ag.slit_widths_from_peaks(win,im,plot=False,tolerance=sigma,n=tol,rang=rang,sigma=psigma) #do even if flagged
+            #make sure from_centers is true
+            if ck and im[6:-14] not in flags: #and im not in flags:
                 check.append(im)
             #if im in flags: #mask?
             #    mask.append() # empty array of same shape?
             allwidths.append(np.array(ww))
-            allperiods.append(np.array(pp))
+            periods_from_centers=[]
+            for n,c in enumerate(ca[:-1]):
+                periods_from_centers.append(ca[n+1]-c)
+            allperiods.append(np.array(periods_from_centers)) #use period calculated from slat centers (this is just the positions of slat centers tho...
+            if p ==0:
+                print ang,np.mean(periods_from_centers),np.mean(ww)
     #print np.shape(allwidths),np.shape(allperiods)
     #sort into grouped by P and grouped by angle
     #allwidthsp=allwidths
@@ -177,6 +257,73 @@ def calc_widths_allP(win,data_dict,tolvec=False,sigma=False):
     print "Check these images: "
     print check
     return xvec,np.array(allwidthsp),np.array(allwidthsa),np.array(allperiodsp),np.array(allperiodsa)#,errvec
+
+def read_logfile(filename,win):
+    ''' transm_step011_window012_     -28.178	 9.157	314.500	 0.000 '''
+    with open(filename) as f:
+        lines=f.readlines()
+    wstr='window0'+str(win)
+    for l in lines:
+        if l.startswith('transm') and wstr in l:
+            ls=l.split('\t')
+            theta0=ls[2]
+    return float(theta0)
+
+def GWcalc_widths_allP(files,tolvec=False,sigma=False):
+    '''should I deal with flagged data here? send the arrays back as masked arrays? '''
+    widths,allwidths,allperiods,check=[],[],[],[]
+
+    for j,ang in enumerate(xvecstr):
+        fnames=data_dict['p'+str(p)]
+        im=[fn for fn in fnames if fn=='win'+str(win)+'_p'+str(p)+'_'+ang+'_corrected.tif'][0]
+        if tolvec:
+            tol=tolvec[j]
+        else:
+            tol=6
+        #print im
+        pp,ww,ck=ag.slit_widths_from_peaks(win,im,plot=False,tolerance=sigma,n=tol) #do even if flagged
+        if ck: #and im not in flags:
+            check.append(im)
+            #if im in flags: #mask?
+            #    mask.append() # empty array of same shape?
+        allwidths.append(np.array(ww))
+        allperiods.append(np.array(pp))
+    #print np.shape(allwidths),np.shape(allperiods)
+    #sort into grouped by P and grouped by angle
+    #allwidthsp=allwidths
+    allwidthsp=[allwidths[i::len(xvec)] for i in range (0,len(xvec))]#[allwidths[i::7] for i in range(0,7)]
+    allwidthsa=[allwidths[i::7] for i in range (0,7)]
+    allperiodsp=[allperiods[i::len(xvec)] for i in range (0,len(xvec))]
+    allperiodsa=[allperiods[i::7] for i in range (0,7)]
+    print "Check these images: "
+    print check
+
+    if plot:
+        #make the histogram
+        if type(periods) == np.ma.core.MaskedArray:
+            print 'masked arrays'
+            periods=periods.compressed()
+            periodr=periodr.compressed()
+            periodf=periodf.compressed()
+        fig,ax=plt.subplots(1,3,sharex=True,sharey=True)
+        bins=np.arange(np.min(periods),np.max(periods),np.std(periods)/2.)
+        ax[0].hist(periodr,bins,facecolor='g')
+        ax[1].hist(periodf,bins,facecolor='r')
+        ax[2].hist(periods,bins)
+        ax[0].set_xlim([grating.nominal['pitch']-5,grating.nominal['pitch']+5])
+        ax[0].set_title('Rising')
+        ax[1].set_title('Falling')
+        ax[2].set_title('Total')
+        ax[0].set_xlabel('Period $\mu$m')
+        ax[0].set_ylabel('Counts')
+        ax[0].set_yscale('log')
+        ax[0].set_ylim([1,10000])
+        figfilename='win'+str(win)+'_group_periods5.0X'+ftags+'.png'
+        fig.savefig(figfilename)
+        fig.show()
+
+    return xvec,np.array(allwidthsp),np.array(allwidthsa),np.array(allperiodsp),np.array(allperiodsa)#,errvec
+
 
 def check_single_image(imname,tolerance=False,sigma=2.):
     win=int(imname[3:5])
@@ -248,9 +395,9 @@ def basic_sum(imlist,flaglist=False,binary=False,groupstretch=True,show=True):
             imarr=imltfilled
         elif groupstretch:
             xvec.append(float(im[im.find("_")+4:-17]))
-        sumvec.append(float(np.sum(imarr)))
+        sumvec.append(float(np.nanmean(imarr))) #use nanmean just in case the image has been cropped...none have as far as I know
         if flaglist:
-            if im in flaglist:
+            if im[6:im.rfind('_')] in flaglist:
                 mask.append(True)
             else:
                 mask.append(False)
@@ -268,16 +415,13 @@ def basic_sum(imlist,flaglist=False,binary=False,groupstretch=True,show=True):
         #ax.set_ylim([0,1])
         ax.set_xlabel('Angle')
         fig.show()
+    #print mask
     return xvec,sumvec,mask
 
-def basic_sum_allP(data_dict,binary=False):
+def basic_sum_allP(data_dict,binary=False,flags=False):
     sumvecs,masks=[],[]
     for p in range(0,7):
         files=data_dict['p'+str(p)]#glob.glob('win'+win+'_p'+str(p)+'*'+'_groupstretch.tif')
-        try:
-            flagged_files=data_dict['flagged']
-        except KeyError:
-            flagged_files=False
         #first fix order so can avoid that later...
         if binary:
             xv=[float(im[im.find("_")+4:-13]) for im in files]
@@ -289,7 +433,7 @@ def basic_sum_allP(data_dict,binary=False):
         xv.sort()
         fsort=[b[1] for b in aa]
 
-        xvec,sv,mask=basic_sum(fsort,flagged_files,binary=binary,show=False) #they should be in the right order now
+        xvec,sv,mask=basic_sum(fsort,flaglist=flags,binary=binary,show=False) #they should be in the right order now
         #fix order for plotting connecting line
         sumvecs.append(sv/np.max(sv))
         masks.append(mask)
@@ -419,93 +563,169 @@ def fit_gaussian_to_hist(widths,win=False, ang=False,bran=False,n=20):
     #return xdata,ydata,gauss
 
 
-def compare_methods(win,binary,sums,widths,yran=False,figname=False):
+def compare_methods(win,sums,widths,wnom,yran=False,figname=False,title=False,pix2um=.65,xvmid=False,excl=False,ex_mid='L'):
     '''compare 3 different analysis methods'''
     #binary,sums and widths are Results objects
-    xvec=binary.data['xdata']
-    xvmid=xvec.index(0.0)
-    binary_ydata=np.array(binary.data['ydata'])
-    sum_ydata=np.array(sums.data['ydata'])
-    width_ydata=np.array(widths.data['ydata']) #have to multiply by 2
+    xvec=sums.data['xdata']
+    if not xvmid:
+        xvmid=xvec.index(0.0)
+    xvec=np.array(xvec)
+    #binary_ydata=np.array(binary.data['ydata'])
+    sum_ydata=sums.data['ydata']
+    width_ydata=np.array(widths.data['mean_widths_P'])*pix2um #have to multiply by 2
+    #adjust ydata... take averages along ax=0?
 
     #get averages
-    binary_av=np.mean(binary_ydata,axis=0)
-    sum_av=np.mean(sum_ydata,axis=0)
-    wav=np.mean(width_ydata,axis=0)
-    fac=1./np.max(wav)
-    width_av=fac*wav#np.mean(width_ydata,axis=0)
-    width_ydata=fac*width_ydata
-
-    #get the total average
-    tot_av=(binary_av+sum_av+width_av)/3.
-    fitsplus=tot_av[:len(tot_av)/2 +1]
-    fitsminus=tot_av[len(tot_av)/2:]
+    #binary_av=np.mean(binary_ydata,axis=0)
+    sum_av=np.nanmean(sum_ydata,axis=0)
+    wav=np.nanmean(width_ydata,axis=0)
+    #fac=1./np.max(wav)
+    width_av=wav#fac*wav#np.mean(width_ydata,axis=0)
+    width_ydata=width_ydata
 
     #get upper bounds at each p
-    binary_max=np.ndarray.max(binary_ydata,axis=0)
-    sum_max=np.ndarray.max(sum_ydata,axis=0)
-    width_max=np.ndarray.max(width_ydata,axis=0)
+    #binary_max=np.ndarray.max(binary_ydata,axis=0)
+    sydt=np.transpose(sum_ydata)
+    wydt=np.transpose(width_ydata)
+    sum_max=np.array([np.nanmax(y) for y in sydt])
+    width_max=[np.nanmax(y) for y in wydt]
 
     #get lower bounds at each p
-    binary_min=np.ndarray.min(binary_ydata,axis=0)
-    sum_min=np.ndarray.min(sum_ydata,axis=0)
-    width_min=np.ndarray.min(width_ydata,axis=0)
+    #binary_min=np.ndarray.min(binary_ydata,axis=0)
+    sum_min=np.array([np.nanmin(y) for y in sydt])
+    width_min=[np.nanmin(y) for y in wydt]
+
+    #exclude points if needed. excl is a mask!
+    if type(excl)==list:
+        sum_av=np.ma.masked_array(sum_av,mask=excl)
+        width_av=np.ma.masked_array(width_av,mask=excl)
+        sum_max=np.ma.masked_array(sum_max,mask=excl)
+        sum_min=np.ma.masked_array(sum_min,mask=excl)
+        width_max=np.ma.masked_array(width_max,mask=excl)
+        width_min=np.ma.masked_array(width_min,mask=excl)
+        xvec=np.ma.masked_array(xvec,mask=excl)
+        #apply mask to xvec too
+
+    #get the total average
+    #tot_av=(sum_av+width_av)/2.
+    if ex_mid=='L':
+        xfplus=xvec[:xvmid]
+        xfminus=xvec[xvmid:]
+        fitsplus=width_av[:xvmid]
+        fitsminus=width_av[xvmid:]
+
+    elif ex_mid=='R': #exclude midpoint from line fit on left
+        xfplus=xvec[:xvmid+1]
+        xfminus=xvec[xvmid+1:]
+        fitsplus=width_av[:xvmid+1]
+        fitsminus=width_av[xvmid+1:]
+
+    else: #fit both
+        xfplus=xvec[:xvmid]
+        xfminus=xvec[xvmid-1:]
+        fitsplus=width_av[:xvmid]
+        fitsminus=width_av[xvmid-1:]
+
+#     elif ex_mid=='R':
+#         pend=xvmid
+#         mstart=xvmid+1
+#     else: #default exclude from both
+#         pend=xvmid-1
+#         mstart=xvmid+1
+
+
+
+    (meanplusslope,meanplusintercept),perr,_,_,_=np.ma.polyfit(xfplus,fitsplus,1,full=True)
+    (meanminusslope,meanminusintercept),merr,_,_,_=np.ma.polyfit(xfminus,fitsminus,1,full=True)
+    lineintx,lineinty=ag.get_intersect(meanplusslope,meanminusslope,meanplusintercept,meanminusintercept)
+
+    #now plot the differences from the average
+    xfminus=np.insert(xfminus,0,xvec[xvmid-1],axis=0)
+    if ex_mid =='R': #ad xvmid to this one
+        xfminus=np.insert(xfminus,1,xvec[xvmid],axis=0)
+    if ex_mid == 'L':
+        xfplus=np.insert(xfplus,len(xfplus),xvec[xvmid],axis=0)
+    if ex_mid == 'B':
+        xfminus=np.insert(xfminus,1,xvec[xvmid],axis=0)
+        xfplus=np.insert(xfplus,len(xfplus),xvec[xvmid],axis=0)
+    xfplus=np.insert(xfplus,len(xfplus),xvec[xvmid+1],axis=0)
+    meanminusline=meanminusslope*xfminus + meanminusintercept
+    meanplusline=meanplusslope*xfplus+meanplusintercept
+    #print xvec
+    #print xfplus,xfminus
+
+    if ex_mid =="R":
+        mp=list(meanplusline[:-1])
+        mp.extend(list(meanminusline[2:]))
+    elif ex_mid =="B": #include midpoint in both
+        mp=list(meanplusline[:-3])
+        mp.extend(list(meanminusline[2:]))
+    else:
+        mp=list(meanplusline[:-2])
+        mp.extend(list(meanminusline[1:]))
+    mpa=np.array(mp)
+
+    ddict={'xvec':xvec,'xfplus':xfplus,'xfminus':xfminus,'width_av':width_av,'width_min':width_min,'width_max':width_max,'fitsplus':fitsplus,'fitsminus':fitsminus,'sum_av':sum_av,'sum_min':sum_min,'sum_max':sum_max,'mpa':mpa}
+    fdict={'plus_slope':meanplusslope,'minus_slope':meanminusslope,'plus_line':meanplusline,'minus_line':meanminusline,"int_x":lineintx,'int_y':lineinty,'xvmid':xvmid,'excl':excl,'xvmid':xvmid,'plus_err':perr,'minus_err':merr}
+
+    compare_methods_plot(win,ddict,fdict,yran=yran,title=title,figname=figname)
+
+    return ddict,fdict
+
+def compare_methods_plot(win,ddict,fdict,yran=False,title=False,figname=False):
 
     fig,ax=plt.subplots(2,sharex=True,figsize=[10,8])
-    #ax=fig.add_subplot(112)
-    ax[0].fill_between(xvec,binary_min,binary_max,alpha=.6,color='c',)
-    ax[0].fill_between(xvec,sum_min,sum_max,alpha=.6,color='m',)
-    ax[0].fill_between(xvec,width_min,width_max,alpha=.6,color='y',)
+    ax_sum = ax[0].twinx()
+    ax_sum.set_zorder(0)
+    ax[0].set_zorder(1)
+    ax_diff = ax[1].twinx()
 
-    ax[0].plot(xvec,binary_av,'-o',color='c',label='binary')
-    ax[0].plot(xvec,sum_av,'-o',color='m',label='sum')
-    ax[0].plot(xvec,width_av,'-o',color='y',label='widths')
+    #ax=fig.add_subplot(112)
+    #ax[0].fill_between(xvec,binary_min,binary_max,alpha=.6,color='c',)
+    ax_sum.fill_between(ddict['xvec'],ddict['sum_min'],ddict['sum_max'],alpha=.6,color=cbp[1],label='sum')
+    ax[0].fill_between(ddict['xvec'],ddict['sum_min']*fdict['int_y'],ddict['sum_max']*fdict['int_y'],alpha=.6,color=cbp[1],label='sum')
+ #ax[0].fill_between(xvec[:1],width_av[:1],width_av[:1],alpha=.6,color=cbp[1],label='sum')
+    #ax[0].fill_between(xvec,width_min,width_max,alpha=.6,color='y',)
+
+    #ax[0].plot(xvec,binary_av,'-o',color='c',label='binary')
+    #ax[0].plot(xvec,sum_av,'-o',color='m',label='sum')
+    ax[0].plot(ddict['xvec'],ddict['width_av'],'-o',color=cbp[0],linewidth=2,label='widths')
     #ax[0].plot(xvec,tot_av,'--',color='g',label='widths')
 
     ax[0].axvline(color='k',linestyle='dashed')
     if not yran:
-        ax[0].set_ylim([.1,1.1])
+        ax[0].set_ylim([np.min(ddict['width_min']),np.max(ddict['width_max'])])
+        ax_sum.set_ylim([np.min(ddict['width_min'])/fdict['int_y'],np.max(ddict['width_max'])/fdict['int_y']])
+        #ax_sum.set_ylim([.1,1.1])
     else:
         ax[0].set_ylim(yran)
+        ax_sum.set_ylim([yran[0]*100./fdict['int_y'],yran[1]*100./fdict['int_y']])
+        #what does this mean for the sum?
 
     #meanplusslope=np.mean([fp[0] for fp in fitsplus])
     #meanplusintercept=np.mean([fp[1] for fp in fitsplus])
-    meanplusslope,meanplusintercept=np.polyfit(np.array(xvec[:xvmid+1]),fitsplus,1)#meanplusslope*np.array(xv[:xvmid+1]) + meanplusintercept
-    meanplusline=meanplusslope*np.array(xvec[:xvmid+1])+meanplusintercept
-    #print meanplusline
-    #meanminusslope=np.mean([fm[0] for fm in fitsminus])
-    #meanminusintercept=np.mean([fm[1] for fm in fitsminus])
-    meanminusslope,meanminusintercept=np.polyfit(np.array(xvec[xvmid:]),fitsminus,1)
-    meanminusline=meanminusslope*np.array(xvec[xvmid:]) + meanminusintercept
-    lineintx,lineinty=ag.get_intersect(meanplusslope,meanminusslope,meanplusintercept,meanminusintercept)
-    #print meanminusline
-    ax[0].plot(xvec[:xvmid+1],meanplusline,'k--')
-    ax[0].plot(xvec[xvmid:],meanminusline,'k--')
-    yran=ax[0].get_ylim()
-    ymax=float(yran[1])
+        #print meanminusline
+    ax[0].plot(ddict['xfplus'],fdict['plus_line'],'k--')
+    ax[0].plot(ddict['xfminus'],fdict['minus_line'],'k--')
+    ymin=np.ma.min(ddict['width_av'])
+    ymax=np.ma.max(ddict['width_av'])
     xran=ax[0].get_xlim()
     xmin=float(xran[0])
     xmax=float(xran[1])
-    ax[0].text(.75*xmin,.2*ymax,'avg. slope: ' + str(np.round(meanplusslope,3)))
-    ax[0].text(.75*xmin,.1*ymax,'avg. intercept: ' + str(np.round(meanplusintercept,3)))
-    ax[0].text(.5*xmax,.2*ymax,'avg. slope: ' + str(np.round(meanminusslope,3)))
-    ax[0].text(.5*xmax,.1*ymax,'avg. intercept: ' + str(np.round(meanminusintercept,3)))
-    ax[0].text(.15*xmin,.3*ymax,'adj. peak: (' + str(np.round(lineintx,3))+ ',' + str(np.round(lineinty,3))+')')
+    #ax[0].text(.75*xmin,.9*ymax,'avg. slope: ' + str(np.round(fdict['plus_slope'],3)))
+    ##ax[0].text(.75*xmin,.1*ymax,'avg. intercept: ' + str(np.round(meanplusintercept,3)))
+    #ax[0].text(.5*xmax,.9*ymax,'avg. slope: ' + str(np.round(fdict['minus_slope'],3)))
+    ##ax[0].text(.5*xmax,.1*ymax,'avg. intercept: ' + str(np.round(meanminusintercept,3)))
+    #ax[0].text(.15*xmin,ymin,'adj. peak: (' + str(np.round(fdict['int_x'],3))+ ',' + str(np.round(fdict['int_y'],3))+')')
 
-        #ax.set_ylim([0,1.1])
-        #ax.set_xlim([xv[0],xv[-1]])
 
-    #now plot the differences from the average
-    mp=list(meanplusline)[:-1]
-    mp.extend(list(meanminusline))
-    mpa=np.array(mp)
-    ax[1].fill_between(xvec,binary_min-mpa,binary_max-mpa,alpha=.6,color='c',)
-    ax[1].fill_between(xvec,sum_min-mpa,sum_max-mpa,alpha=.6,color='m',)
-    ax[1].fill_between(xvec,width_min-mpa,width_max-mpa,alpha=.6,color='y',)
+    #ax[1].fill_between(xvec,binary_min-mpa,binary_max-mpa,alpha=.6,color='c',)
+    ax[1].fill_between(ddict['xvec'],(ddict['sum_min']*fdict['int_y'])-ddict['mpa'],(ddict['sum_max']*fdict['int_y'])-ddict['mpa'],alpha=.6,color=cbp[1],)
+    ax[1].fill_between(ddict['xvec'],ddict['width_min']-ddict['mpa'],ddict['width_max']-ddict['mpa'],alpha=.6,color=cbp[0],)
 
-    ax[1].plot(xvec,binary_av-mpa,'-o',color='c')
-    ax[1].plot(xvec,sum_av-mpa,'-o',color='m')
-    ax[1].plot(xvec,width_av-mpa,'-o',color='y')
+    #ax[1].plot(xvec,binary_av-mpa,'-o',color='c')
+    ax[1].plot(ddict['xvec'],(ddict['sum_av']*fdict['int_y'])-ddict['mpa'],'-o',color=cbp[1],linewidth=2)
+    ax[1].plot(ddict['xvec'],ddict['width_av']-ddict['mpa'],'-o',color=cbp[0],linewidth=2)
     ax[1].axhline(color='k',linestyle='dashed')
 
     #ax[1].set_ylim([np.min(errvecs),np.max(errvecs)])
@@ -514,19 +734,33 @@ def compare_methods(win,binary,sums,widths,yran=False,figname=False):
     box1=ax[0].get_position()
     box2=ax[1].get_position()
     ax[0].set_position([box1.x0,box1.y0*.7,box1.width,box1.height*1.5])
+    ax_sum.set_position([box1.x0,box1.y0*.7,box1.width,box1.height*1.5])
     ax[1].set_position([box2.x0,box2.y0,box2.width,box2.height*.7])
+    ax_diff.set_position([box2.x0,box2.y0,box2.width,box2.height*.7])
 
-    ax[1].set_xlabel('tan(Angle)') #should I set the lables to the actual angle values? xaxlabels... but they would be in the wrong place
+    ax[1].set_xlabel('Angle (degrees)') #should I set the lables to the actual angle values? xaxlabels... but they would be in the wrong place
     #     if widths:
     #        ax[0].set_title('Window '+ win + ' slit width as a function of angle')
     #        ax[0].set_ylabel('Slit width ($\mu$m)')
     #    else:
-    ax[0].set_title('Window '+ str(win))
-    ax[0].set_ylabel('Percent of maximum transmission')
+    ax[1].set_ylabel('Difference from fit ($\mu$m)')
+    ax_diff.set_ylabel('Difference from fit (%)')
+    yrand=ax[1].get_ylim()
+    ax_diff.set_ylim([yrand[0]*100./fdict['int_y'],yrand[1]*100./fdict['int_y']])
+    if title:
+        ax[0].set_title(title+' Window '+ str(win))
+    else:
+        ax[0].set_title('Window '+ str(win))
+    ax_sum.set_ylabel('Percent of maximum transmission')
+    ax[0].set_ylabel('Slit Width ($\mu$m)')
     ax[0].legend(loc='upper right')
+
+#     fig.canvas.draw()
+#     sticks=[float(t.get_text) for t in ax_sum.get_yticklabels()]
+#     new_sticks=sticks/lineinty
+#     ax_sum.set_yticklabels(new_sticks)
+
     if figname:
         plt.savefig(figname)
     else:
         fig.show()
-
-

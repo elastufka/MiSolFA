@@ -15,45 +15,55 @@ import os
 def rv(value,dec=3):
     return np.round([value],decimals=dec)[0]
 
-def all_possible_moire(windict,windownum,dec=3,n=50,percent=10):
+def all_possible_moire(windict,windownum,pvar,avar,dec=3,n=50,percent=10, plot= False):
     '''Takes dictionary of statistics and window number to calculate and plot histograms of period and orientation distributions'''
     fdict=[ww for ww in windict[:11] if ww['number'] == windownum][0]
     rdict=[ww for ww in windict[11:] if ww['number'] == windownum][0]
-    FmeanP=rv(fdict['pmean'],dec)
-    FdevP=rv(fdict['pvar'],dec)#np.linspace(-1*rv(fdict['pvar'],dec),rv(fdict['pvar'],dec),n) ##vectorize
-    RmeanP=rv(rdict['pmean'],dec)
-    RdevP=rv(rdict['pvar'],dec)#np.linspace(-1*rv(rdict['pvar'],dec),rv(rdict['pvar'],dec),n)##vectorize
-    FmeanA=rv(fdict['amean'],dec)*np.pi/180.
-    FdevA=rv(fdict['avar'],dec)*np.pi/180.#np.linspace(-1*rv(fdict['avar'],dec)*np.pi/180,rv(fdict['avar'],dec)*np.pi/180,n)
-    RmeanA=-1.*rv(rdict['amean'],dec)*np.pi/180.
-    RdevA=rv(rdict['avar'],dec)*np.pi/180.#np.linspace(-1*rv(rdict['avar'],dec)*np.pi/180,rv(rdict['avar'],dec)*np.pi/180,n)
-    #FgaussP=np.random.normal(FmeanP,FdevP,n)
-    #FgaussA=np.random.normal(FmeanA,FdevA,n)
-    #RgaussP=np.random.normal(RmeanP,RdevP,n)
-    #RgaussA=np.random.normal(RmeanA,RdevA,n)
+    #FmeanP=rv(fdict['pmean'],dec)
+    #FdevP=rv(fdict['pvar'],dec)#np.linspace(-1*rv(fdict['pvar'],dec),rv(fdict['pvar'],dec),n) ##vectorize
+    #RmeanP=rv(rdict['pmean'],dec)
+    #RdevP=rv(rdict['pvar'],dec)#np.linspace(-1*rv(rdict['pvar'],dec),rv(rdict['pvar'],dec),n)##vectorize
+    #FmeanA=rv(fdict['amean'],dec)*np.pi/180.
+    #FdevA=rv(fdict['avar'],dec)*np.pi/180.#np.linspace(-1*rv(fdict['avar'],dec)*np.pi/180,rv(fdict['avar'],dec)*np.pi/180,n)
+    #RmeanA=-1.*rv(rdict['amean'],dec)*np.pi/180.
+    #RdevA=rv(rdict['avar'],dec)*np.pi/180.#np.linspace(-1*rv(rdict['avar'],dec)*np.pi/180,rv(rdict['avar'],dec)*np.pi/180,n)
+    FmeanP=rv(fdict['pitch'],dec)
+    FdevP=pvar#rv(fdict['pvar'],dec)#np.linspace(-1*rv(fdict['pvar'],dec),rv(fdict['pvar'],dec),n) ##vectorize
+    RmeanP=rv(rdict['pitch'],dec)
+    RdevP=pvar #rv(rdict['pvar'],dec)#np.linspace(-1*rv(rdict['pvar'],dec),rv(rdict['pvar'],dec),n)##vectorize
+    FmeanA=rv(fdict['nominal angle'],dec)*np.pi/180.
+    FdevA=avar*np.pi/180.#np.linspace(-1*rv(fdict['avar'],dec)*np.pi/180,rv(fdict['avar'],dec)*np.pi/180,n)
+    RmeanA=-1.*rv(rdict['nominal angle'],dec)*np.pi/180.
+    RdevA=avar*np.pi/180.#np.linspace(-1*rv(rdict['avar'],dec)*np.pi/180,rv(rdict['avar'],dec)*np.pi/180,n)
 
-    FgaussP=np.random.normal(59.855,.06,n)
-    FgaussA=np.random.normal(44.86*np.pi/180.,.02*np.pi/180.,n)
-    RgaussP=np.random.normal(60.145,.06,n)
-    RgaussA=np.random.normal(45.14*np.pi/180.,.02*np.pi/180.,n)
-    
-    
+    FgaussP=np.random.normal(FmeanP,FdevP,n)
+    FgaussA=np.random.normal(FmeanA,FdevA,n)
+    RgaussP=np.random.normal(RmeanP,RdevP,n)
+    RgaussA=np.random.normal(RmeanA,RdevA,n)
+
+    #FgaussP=np.random.normal(59.855,.06,n)
+    #FgaussA=np.random.normal(44.86*np.pi/180.,.02*np.pi/180.,n)
+    #RgaussP=np.random.normal(60.145,.06,n)
+    #RgaussA=np.random.normal(45.14*np.pi/180.,.02*np.pi/180.,n)
+
+
     Fx_vec,Fy_vec=calc_Svec(FgaussP,FgaussA)
     Rx_vec,Ry_vec=calc_Svec(RgaussP,RgaussA)
 
-    fig,(ax1,ax2)=plt.subplots(2)
-    ax1.hist(FgaussP,n/2)
-    ax2.hist(RgaussP,n/2)
-    fig.show()
-    
-    fig,(ax1,ax2)=plt.subplots(2)
-    ax1.hist(FgaussA*180./np.pi,n/2)
-    ax2.hist(RgaussA*180./np.pi,n/2)
-    fig.show()
+    #if plot:
+    #    fig,(ax1,ax2)=plt.subplots(2)
+    #    ax1.hist(FgaussP,n/2)
+    #    ax2.hist(RgaussP,n/2)
+    #    fig.show()
+
+    #    fig,(ax1,ax2)=plt.subplots(2)
+    #    ax1.hist(FgaussA*180./np.pi,n/2)
+    #    ax2.hist(RgaussA*180./np.pi,n/2)
+    #    fig.show()
 
     print np.mean(FgaussP),np.mean(RgaussP),np.std(FgaussP),np.std(RgaussP)
     print np.mean(FgaussA)*180./np.pi,np.mean(RgaussA)*180./np.pi,np.std(FgaussA)*180./np.pi,np.std(RgaussA)*180./np.pi
-   
+
     period,orientation=[],[]
     gp,go=[],[]
     pl=8.8-(percent/100.)*8.8
@@ -61,8 +71,8 @@ def all_possible_moire(windict,windownum,dec=3,n=50,percent=10):
     ol=90.-(percent/100.)*90.
     oh=90.+(percent/100.)*90.
     #print pl,ph,ol,oh
-    
-    for Fx,Fy in zip(Fx_vec,Fy_vec): #do this for all possible combinations of Fi, Rj...that's kind of a lot... 
+
+    for Fx,Fy in zip(Fx_vec,Fy_vec): #do this for all possible combinations of Fi, Rj...that's kind of a lot...
        #for Fy in Fy_vec:
         for Rx,Ry in zip(Rx_vec,Ry_vec):
                #for Ry in Ry_vec:
@@ -78,27 +88,103 @@ def all_possible_moire(windict,windownum,dec=3,n=50,percent=10):
     orientation=np.array(orientation)
 
     #plot
-    fig,(axp,axo)=plt.subplots(2)
-    pbins=axp.hist(period,np.linspace(0,17.6,50))
-    #axp.set_xlim([0,17.6])
-    obins=axo.hist(orientation, np.linspace(np.min(orientation),np.max(orientation),n))
-    axo.set_xlim([np.min(orientation),np.max(orientation)])
-    axp.set_title('All possible (?) moir\'e periods and orientations within 1$\sigma$, subcoll. '+str(windownum))
-    axp.set_xlabel('Period (mm)')
-    axo.set_xlabel('Orientation (deg)')
-    axp.set_yscale('log')
-    axo.set_yscale('log')
-    fig.show()
+    if plot:
+        fig,(axp,axo)=plt.subplots(2)
+        pbins=axp.hist(period,np.linspace(0,17.6,50))
+        #axp.set_xlim([0,17.6])
+        obins=axo.hist(orientation, np.linspace(np.min(orientation),np.max(orientation),n))
+        axo.set_xlim([np.min(orientation),np.max(orientation)])
+        axp.set_title('All possible (?) moir\'e periods and orientations within 1$\sigma$, subcoll. '+str(windownum))
+        axp.set_xlabel('Period (mm)')
+        axo.set_xlabel('Orientation (deg)')
+        axp.set_yscale('log')
+        axo.set_yscale('log')
+        fig.show()
 
     print 'Mean period: ' , np.mean(period)
     print 'Mean orientation: ' , np.mean(orientation)
-   
+
     #calculate probability that moire is within 10% of nominal period AND orientation
     #print len(gp), len(period)
     print 'Probability that values are within ', str(percent), '% of nominal values: ',(float(len(gp))/float(len(period)))*100 , ' %'
 
-    
-    return period,orientation
+
+    return #period,orientation
+
+def calc_prob(Fx_vec,Fy_vec,Rx_vec,Ry_vec,percent=10.):
+    period,orientation=[],[]
+    gp,go=[],[]
+    pl=8.8-(percent/100.)*8.8
+    ph=8.8+(percent/100.)*8.8
+    ol=90.-(percent/100.)*90.
+    oh=90.+(percent/100.)*90.
+    #print pl,ph,ol,oh
+
+    for Fx,Fy in zip(Fx_vec,Fy_vec): #do this for all possible combinations of Fi, Rj...that's kind of a lot...
+       #for Fy in Fy_vec:
+        for Rx,Ry in zip(Rx_vec,Ry_vec):
+               #for Ry in Ry_vec:
+            p,o=calc_period_and_orientation(Fx,Fy,Rx,Ry)
+            period.append(p)
+            orientation.append(o)
+            if p > pl and p < ph:
+                if np.abs(o) < oh and np.abs(o) > ol:#p > pl and p < ph and
+                    gp.append(p)
+                    go.append(o)
+
+    period=np.array(period)
+    orientation=np.array(orientation)
+    #print 'Probability that values are within ', str(percent), '% of nominal values: ',(float(len(gp))/float(len(period)))*100 ,
+    prob=(float(len(gp))/float(len(period)))*100
+    return prob
+
+def calc_gauss(windict,windownum,pvar,avar,dec=3,n=50):
+    fdict=[ww for ww in windict[:12] if ww['number'] == windownum][0]
+    rdict=[ww for ww in windict[12:] if ww['number'] == windownum][0]
+    FmeanP=rv(fdict['pitch'],dec)
+    FdevP=pvar#rv(fdict['pvar'],dec)#np.linspace(-1*rv(fdict['pvar'],dec),rv(fdict['pvar'],dec),n) ##vectorize
+    RmeanP=rv(rdict['pitch'],dec)
+    RdevP=pvar #rv(rdict['pvar'],dec)#np.linspace(-1*rv(rdict['pvar'],dec),rv(rdict['pvar'],dec),n)##vectorize
+    FmeanA=rv(fdict['nominal angle'],dec)*np.pi/180.
+    FdevA=avar*np.pi/180.#np.linspace(-1*rv(fdict['avar'],dec)*np.pi/180,rv(fdict['avar'],dec)*np.pi/180,n)
+    RmeanA=-1.*rv(rdict['nominal angle'],dec)*np.pi/180.
+    RdevA=avar*np.pi/180.#np.linspace(-1*rv(rdict['avar'],dec)*np.pi/180,rv(rdict['avar'],dec)*np.pi/180,n)
+
+    FgaussP=np.random.normal(FmeanP,FdevP,n)
+    FgaussA=np.random.normal(FmeanA,FdevA,n)
+    RgaussP=np.random.normal(RmeanP,RdevP,n)
+    RgaussA=np.random.normal(RmeanA,RdevA,n)
+    Fx_vec,Fy_vec=calc_Svec(FgaussP,FgaussA)
+    Rx_vec,Ry_vec=calc_Svec(RgaussP,RgaussA)
+    return Fx_vec,Fy_vec,Rx_vec,Ry_vec
+
+def prob95(windict,windownum,pran=[.001,.1],aran=[.001,.1],percent=10,dec=3,n=50,endprob=95.):
+    pvec=np.linspace(pran[1],pran[0],50)#int(pran[1]/pran[0]))
+    avec=np.linspace(aran[1],aran[0],50)#int(aran[1]/aran[0]))
+    loopcounter=0
+    prob=0.0
+    matches=[]
+
+    for p in pvec:
+        for a in avec:
+            Fx_vec,Fy_vec,Rx_vec,Ry_vec=calc_gauss(windict,windownum,p,a,dec=dec,n=n)
+            prob=calc_prob(Fx_vec,Fy_vec,Rx_vec,Ry_vec,percent=percent)
+            loopcounter+=1
+            if prob >= endprob-1.5 and prob <=endprob+1.5:
+                #print('Window '+str(windownum)+': sigma_p='+str(p)+' sigma_a='+str(a)+' prob='+str(prob))
+                #return
+                matches.append([p,a,prob])
+    #find match that maximizes p and a, minimizes prob
+    outmatches=[matches[0]]
+    for i,m in enumerate(matches[:-1]):
+        if matches[i+1][0] > m[0] or matches[i+1][1] > m[1]:
+            outmatches.append(matches[i+1])
+    #print the one where p and a are most similar
+    diffs=[np.abs(n[0]-n[1]) for n in outmatches]
+    mindex=diffs.index(np.min(diffs))
+    print('Window '+str(windownum)+': sigma_p='+str(outmatches[mindex][0])+' sigma_a='+str(outmatches[mindex][1])+' prob='+str(outmatches[mindex][2]))
+    #print loopcounter
+    return outmatches#pvec,avec
 
 def calc_period_and_orientation(Fx,Fy,Rx,Ry):
     '''for a single value of Fx,Fy, Rx,Ry'''
@@ -110,9 +196,9 @@ def calc_period_and_orientation(Fx,Fy,Rx,Ry):
 
 def calc_Svec(gaussP,gaussA): #(meanP,devP,meanA,devA):
     '''mean and dev in radians'''
-    Sx=1000.*np.sin(gaussA)/(gaussP) 
-    Sy=-1000.*np.cos(gaussA)/(gaussP) 
-    return Sx,Sy    
+    Sx=1000.*np.sin(gaussA)/(gaussP)
+    Sy=-1000.*np.cos(gaussA)/(gaussP)
+    return Sx,Sy
 
 
 def plot_params(window,title1='Front Assembly',title2='Rear Assembly',ptype=False):
@@ -143,7 +229,7 @@ def plot_params(window,title1='Front Assembly',title2='Rear Assembly',ptype=Fals
     ax.set_ylabel('Mean Width - Nominal Width, $\mu$m')
     fig.show()
     #return noms
-    
+
     #front window - angle vs. expected values
     #wnums=[window[i]['number'] for i in range(0,12)]
     ameds=[np.abs(window[i]['amean']) for i in range(0,12)]
@@ -166,4 +252,4 @@ def plot_params(window,title1='Front Assembly',title2='Rear Assembly',ptype=Fals
     ax.set_ylabel('Absolute Value of Slat Orientation in degrees')
     ax.legend()
     fig.show()
-    
+

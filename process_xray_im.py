@@ -125,9 +125,12 @@ def fit_sine(im,im0,period,amp,plot=True):
     fig.show()
     return p1
 
-def fit_sine_interactive(win,pix2um=24.,plot=False,edges=False,hough=False,rmean=False):
+def fit_sine_interactive(win,pix2um=24.,plot=False,edges=False,hough=False,rmean=False,calctheta=False):
     wdict = [wd for wd in moire if wd['number'] == win]
-    ang= -1*wdict[0]['angle']
+    if not calctheta:
+        ang= -1*wdict[0]['angle']
+    else:
+        ang=calc_theta(win)
     period= wdict[0]['period_px']
     amp= wdict[0]['amp']
     imf='win'+str(win)+'.tif'
@@ -136,10 +139,12 @@ def fit_sine_interactive(win,pix2um=24.,plot=False,edges=False,hough=False,rmean
     while not proceed:
         crop=raw_input('crop number of pixels: ')
         im=remove_edges(im,ncrop=int(crop),plot=True)
+        osize=np.shape(im)
         pstr=raw_input('proceed? (y/n) ')
         if pstr =='y':
             proceed=True
     im=contrast_stretch(im)
+    ang=ang+90.
     rs=rot_sum(im,ang)
     fit = True
     trim=False
@@ -150,6 +155,9 @@ def fit_sine_interactive(win,pix2um=24.,plot=False,edges=False,hough=False,rmean
             ang,im= hough2im(edata,plot=plot)
         print 'rotation angle ',ang
         rs=rot_sum(im,ang,plot=plot,edges=edges,rmean=rmean)
+        rsizex=np.shape(rs)
+        #print 'osizex',osize[0],'rsizex',rsizex[0],'ratio',float(rsizex[0])/float(osize[0]),'sin+cos',np.sin(np.deg2rad(ang))+np.cos(np.deg2rad(ang)),'tan',
+        tant=np.tan(np.deg2rad(ang))
         if trim:
             rs=rs[trim:-trim]
         p1=fit_sine(rs,im,period,amp)
@@ -164,9 +172,9 @@ def fit_sine_interactive(win,pix2um=24.,plot=False,edges=False,hough=False,rmean
             trim=float(flist[3])
     plotmoire=raw_input('plot moire? (y,n)')
     if plotmoire == 'y':
-        periodmm=2.*p1[1]*pix2um/1000.
+        periodmm=(p1[1]/tant)*pix2um/1000.
         print 'period (mm) ',periodmm
-        plot_moire_fancy([periodmm],[90.+ang])
+        plot_moire_fancy([periodmm],[ang-90.])
             
 def Canny_edge(im,sigma=3,mag=5.0,gauss=False,plot=False,outfilen=False):
     #max contrast
@@ -230,6 +238,29 @@ def hough2im(edges,threshold=5,line_length=25,line_gap=2,spread=1,n=100,plot=Fal
     him=eh.lines2data(lines0)
     #should run get_period_by_grouping next...
     return np.rad2deg(theta0),him
+
+def calc_theta(win,sigma=3,threshold=5,line_length=25,line_gap=2,spread=1,n=100,plot=False):
+    '''calculate the orientation of the moire pattern based on Hough line segments'''
+    imf='win'+str(win)+'.tif'
+    im=im2ndarray(imf)
+    im=remove_edges(im)
+    im=contrast_stretch(im)
+    edges=Canny_edge(im,sigma=sigma)
+    lines0 = probabilistic_hough_line(edges, threshold=threshold, line_length=line_length,
+                                 line_gap=line_gap)
+    theta0=np.mean([eh.get_angle(l) for l in lines0])
+    print 'theta0 :',theta0
+    if plot:
+        fig, ax = plt.subplots(1, 1, figsize=(7, 6))
+        #ax = ax.ravel()
+        ax.imshow(np.ma.masked_where(edges == 0,edges),cmap=cm.gray)
+        for line in lines0:
+            p0, p1 = line
+            ax.plot((p0[0], p1[0]), (p0[1], p1[1]), color='r')
+        ax.set_title('Canny edges overlaid with probabilistic Hough')
+        ax.set_axis_off()
+        fig.show()
+    return theta0
 
 def run_groups(win,plot=True):
     wdict = [wd for wd in moire if wd['number'] == win]

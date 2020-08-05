@@ -1,6 +1,4 @@
 import numpy as np
-import q
-@q
 
 def flare_XR_dist():
     '''Returns the typical distribution of counts for a flare in the energy range ... keV'''
