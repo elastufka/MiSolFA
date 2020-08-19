@@ -1,0 +1,17 @@
+#variable window number val1 val2 val3
+observed 33 1.35 -40.3
+observed 43 1.47 46.97
+observed 34 1.55 47.42
+observed 44 1.59 -41.26
+start_params 33 18 -44.93 18 -45.07 115.7 1 142 0
+start_params 43 18 45.07 18 44.93 115.7 1 142 0
+start_params 34 15 44.94 15 45.06 115.7 1 142 0
+start_params 44 15 -45.06 15 -44.94 115.7 1 142 0
+param_ranges 33 (0,1) (0,1) (0,1) (0,1) (-2,2) (0,.6) (-2,2) (-1,1)
+param_ranges 43 (0,1) (0,1) (0,1) (0,1) (-2,2) (0,.6) (-2,2) (-1,1)
+param_ranges 34 (0,1) (0,1) (0,1) (0,1) (-2,2) (0,.6) (-2,2) (-1,1)
+param_ranges 44 (0,1) (0,1) (0,1) (0,1) (-2,2) (0,.6) (-2,2) (-1,1)
+param_steps 33 1 1 1 1 20 10 20 10
+param_steps 43 1 1 1 1 20 10 20 10
+param_steps 34 1 1 1 1 20 10 20 10
+param_steps 44 1 1 1 1 20 10 20 10
